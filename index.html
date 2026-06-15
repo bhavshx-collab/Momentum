@@ -2,8 +2,39 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>Momentum — Habit Tracker</title>
+
+<!-- ── PWA Core ──────────────────────────────────────────────────────── -->
+<link rel="manifest" href="/manifest.json">
+<meta name="theme-color" content="#8b5cf6">
+<meta name="background-color" content="#050912">
+
+<!-- ── SEO & Description ────────────────────────────────────────────── -->
+<meta name="description" content="Momentum — Your personal habit tracker. Build streaks, crush goals, and track daily progress.">
+<meta name="keywords" content="habit tracker, productivity, streaks, goals, momentum">
+<meta name="author" content="Bhavesh Kumar">
+
+<!-- ── Open Graph / Social ──────────────────────────────────────────── -->
+<meta property="og:title" content="Momentum — Habit Tracker">
+<meta property="og:description" content="Build better habits. Track your momentum every day.">
+<meta property="og:type" content="website">
+<meta property="og:image" content="/icons/icon-512.png">
+
+<!-- ── Apple / iOS PWA ──────────────────────────────────────────────── -->
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Momentum">
+<link rel="apple-touch-icon" href="/icons/icon-192.png">
+<link rel="apple-touch-icon" sizes="192x192" href="/icons/icon-192.png">
+<link rel="apple-touch-icon" sizes="512x512" href="/icons/icon-512.png">
+
+<!-- ── Favicon ───────────────────────────────────────────────────────── -->
+<link rel="icon" type="image/png" sizes="192x192" href="/icons/icon-192.png">
+<link rel="icon" type="image/png" sizes="512x512" href="/icons/icon-512.png">
+<link rel="shortcut icon" href="/icons/icon-192.png">
+
+<!-- ── Fonts & Scripts ───────────────────────────────────────────────── -->
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <style>
@@ -1014,5 +1045,114 @@ document.addEventListener('keydown',e=>{if(e.key==='Escape'){closeHM();closeGM()
 load();
 go('dashboard');
 </script>
+
+<!-- ── PWA Update Notification ──────────────────────────────────────────── -->
+<div id="pwa-update-bar" style="
+  display:none;position:fixed;bottom:24px;left:50%;transform:translateX(-50%);
+  background:linear-gradient(135deg,rgba(139,92,246,.95),rgba(99,102,241,.95));
+  backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);
+  border:1px solid rgba(167,139,250,.4);border-radius:14px;
+  padding:12px 20px;display:none;align-items:center;gap:14px;
+  box-shadow:0 8px 32px rgba(139,92,246,.45),0 0 0 1px rgba(255,255,255,.06);
+  z-index:9999;font-family:'Inter',sans-serif;font-size:13px;color:#f1f5f9;
+  max-width:90vw;white-space:nowrap;
+" id="pwa-update-bar">
+  <span style="font-size:16px">🚀</span>
+  <span style="font-weight:600">New version available!</span>
+  <button onclick="pwaUpdate()" style="
+    background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.2);
+    color:#fff;border-radius:8px;padding:5px 14px;font-family:inherit;
+    font-size:12px;font-weight:600;cursor:pointer;transition:background .2s;
+  " onmouseover="this.style.background='rgba(255,255,255,.25)'" onmouseout="this.style.background='rgba(255,255,255,.15)'">Update Now</button>
+  <button onclick="document.getElementById('pwa-update-bar').style.display='none'" style="
+    background:transparent;border:none;color:rgba(255,255,255,.6);
+    cursor:pointer;font-size:18px;line-height:1;padding:0 2px;
+  ">×</button>
+</div>
+
+<!-- ── Service Worker Registration ──────────────────────────────────────── -->
+<script>
+(function() {
+  if (!('serviceWorker' in navigator)) return;
+
+  let _registration = null;
+
+  // Register SW
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/service-worker.js', { scope: '/' })
+      .then(reg => {
+        _registration = reg;
+        console.log('[PWA] Service Worker registered, scope:', reg.scope);
+
+        // Check for waiting SW on load (user revisiting after update)
+        if (reg.waiting) showUpdateBar(reg.waiting);
+
+        // Listen for new SW installing
+        reg.addEventListener('updatefound', () => {
+          const newWorker = reg.installing;
+          newWorker.addEventListener('statechange', () => {
+            if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+              // New version is ready — prompt user
+              showUpdateBar(newWorker);
+            }
+          });
+        });
+      })
+      .catch(err => console.warn('[PWA] SW registration failed:', err));
+
+    // Listen for SW messages (e.g. SW_UPDATED from activate event)
+    navigator.serviceWorker.addEventListener('message', event => {
+      if (event.data && event.data.type === 'SW_UPDATED') {
+        console.log('[PWA] SW updated to version:', event.data.version);
+      }
+    });
+
+    // Reload page once new SW takes control
+    let refreshing = false;
+    navigator.serviceWorker.addEventListener('controllerchange', () => {
+      if (!refreshing) { refreshing = true; window.location.reload(); }
+    });
+  });
+
+  function showUpdateBar(worker) {
+    const bar = document.getElementById('pwa-update-bar');
+    if (bar) {
+      bar.style.display = 'flex';
+      window._pendingSW = worker;
+    }
+  }
+
+  window.pwaUpdate = function() {
+    if (window._pendingSW) {
+      window._pendingSW.postMessage({ type: 'SKIP_WAITING' });
+    }
+    document.getElementById('pwa-update-bar').style.display = 'none';
+  };
+
+  // PWA Install prompt — expose globally for potential future install button
+  let deferredPrompt = null;
+  window.addEventListener('beforeinstallprompt', e => {
+    e.preventDefault();
+    deferredPrompt = e;
+    console.log('[PWA] Install prompt ready');
+    // Show install prompt on next user interaction if desired
+    window.pwaInstall = () => {
+      if (deferredPrompt) {
+        deferredPrompt.prompt();
+        deferredPrompt.userChoice.then(result => {
+          console.log('[PWA] Install choice:', result.outcome);
+          deferredPrompt = null;
+        });
+      }
+    };
+  });
+
+  window.addEventListener('appinstalled', () => {
+    console.log('[PWA] App installed successfully!');
+    deferredPrompt = null;
+  });
+})();
+</script>
+
 </body>
 </html>
