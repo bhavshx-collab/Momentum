@@ -1,0 +1,29 @@
+# OS files
+Thumbs.db
+desktop.ini
+.DS_Store
+
+# IDEs and Editors
+.vscode/
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# AI Agents & IDE Cache
+.gemini/
+antigravity/
+brain/
+artifacts/
+scratch/
+walkthrough.md
+implementation_plan.md
+task.md
+
+# Vercel
+.vercel/
+
+# Logs
+*.log
