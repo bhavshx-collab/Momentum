@@ -1,0 +1,409 @@
+/* ═══════════════════════════════════════════════════════════════
+   versioning.css — Habit Versioning & Historical Snapshots
+   All styles are scoped and additive — no overrides of existing rules.
+═══════════════════════════════════════════════════════════════ */
+
+/* ── Habit Detail Drawer ─────────────────────────────────────── */
+.habit-detail-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,.55);
+  backdrop-filter: blur(4px);
+  z-index: 800;
+  opacity: 0;
+  transition: opacity .22s ease;
+  pointer-events: none;
+}
+.habit-detail-overlay.open {
+  opacity: 1;
+  pointer-events: all;
+}
+.habit-detail-drawer {
+  position: fixed;
+  top: 0; right: 0; bottom: 0;
+  width: min(600px, 96vw);
+  background: var(--bg2);
+  border-left: 1px solid rgba(148,163,184,.1);
+  box-shadow: -24px 0 60px rgba(0,0,0,.6);
+  z-index: 801;
+  display: flex;
+  flex-direction: column;
+  transform: translateX(100%);
+  transition: transform .28s cubic-bezier(.4,0,.2,1);
+  overflow: hidden;
+}
+.habit-detail-drawer.open {
+  transform: translateX(0);
+}
+.hdd-header {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 20px 24px;
+  border-bottom: 1px solid rgba(148,163,184,.07);
+  flex-shrink: 0;
+}
+.hdd-icon {
+  width: 48px; height: 48px;
+  border-radius: 14px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 22px;
+  flex-shrink: 0;
+}
+.hdd-title { font-size: 18px; font-weight: 800; letter-spacing: -.02em; }
+.hdd-sub   { font-size: 11px; color: var(--t3); margin-top: 2px; }
+.hdd-close {
+  margin-left: auto;
+  width: 32px; height: 32px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: transparent;
+  cursor: pointer;
+  font-size: 16px;
+  display: flex; align-items: center; justify-content: center;
+  color: var(--t2);
+  transition: all .12s;
+  font-family: inherit;
+}
+.hdd-close:hover { background: rgba(239,68,68,.1); border-color: rgba(239,68,68,.3); color: #f87171; }
+.hdd-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 20px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+.hdd-body::-webkit-scrollbar { width: 4px; }
+.hdd-body::-webkit-scrollbar-track { background: transparent; }
+.hdd-body::-webkit-scrollbar-thumb { background: rgba(148,163,184,.2); border-radius: 4px; }
+
+/* ── Version Overview Stats Row ──────────────────────────────── */
+.ver-stats-row {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 10px;
+}
+.ver-stat-mini {
+  background: rgba(148,163,184,.04);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 12px 10px;
+  text-align: center;
+}
+.ver-stat-mini-val { font-size: 20px; font-weight: 800; letter-spacing: -.02em; }
+.ver-stat-mini-lbl { font-size: 9px; color: var(--t2); margin-top: 4px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; }
+
+/* ── Version Timeline ─────────────────────────────────────────── */
+.ver-timeline {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  position: relative;
+}
+.ver-timeline::before {
+  content: '';
+  position: absolute;
+  left: 19px;
+  top: 24px;
+  bottom: 24px;
+  width: 2px;
+  background: linear-gradient(180deg, rgba(139,92,246,.4), rgba(99,102,241,.1));
+  border-radius: 2px;
+}
+.ver-node {
+  display: flex;
+  gap: 16px;
+  align-items: flex-start;
+  position: relative;
+  padding-bottom: 20px;
+}
+.ver-node:last-child { padding-bottom: 0; }
+.ver-node-dot {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  border: 2px solid rgba(139,92,246,.3);
+  background: var(--bg2);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 12px; font-weight: 800;
+  color: var(--t3);
+  flex-shrink: 0;
+  position: relative;
+  z-index: 1;
+  transition: all .2s;
+}
+.ver-node.active .ver-node-dot {
+  border-color: var(--purple);
+  background: rgba(139,92,246,.15);
+  color: var(--plite);
+  box-shadow: 0 0 0 4px rgba(139,92,246,.1), 0 0 20px rgba(139,92,246,.3);
+}
+.ver-node-card {
+  flex: 1;
+  border-radius: 14px;
+  border: 1px solid var(--border);
+  background: rgba(5,10,23,.5);
+  padding: 14px 16px;
+  transition: border-color .2s;
+}
+.ver-node.active .ver-node-card {
+  border-color: rgba(139,92,246,.35);
+  background: rgba(139,92,246,.06);
+  box-shadow: 0 0 0 1px rgba(139,92,246,.1) inset;
+}
+.ver-node-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.ver-node-label {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--t3);
+  text-transform: uppercase;
+  letter-spacing: .08em;
+}
+.ver-active-badge {
+  font-size: 9px;
+  font-weight: 700;
+  background: rgba(139,92,246,.2);
+  color: var(--plite);
+  padding: 2px 8px;
+  border-radius: 20px;
+  border: 1px solid rgba(139,92,246,.3);
+  text-transform: uppercase;
+  letter-spacing: .06em;
+}
+.ver-node-name {
+  font-size: 14px;
+  font-weight: 700;
+  margin-bottom: 4px;
+}
+.ver-target-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--amber);
+  background: rgba(245,158,11,.1);
+  padding: 2px 8px;
+  border-radius: 20px;
+  border: 1px solid rgba(245,158,11,.2);
+  margin-bottom: 8px;
+}
+.ver-period {
+  font-size: 10px;
+  color: var(--t3);
+  margin-bottom: 10px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.ver-stats-bar {
+  display: flex;
+  gap: 12px;
+  margin-top: 8px;
+}
+.ver-stat-item {
+  text-align: center;
+  flex: 1;
+}
+.ver-stat-val  { font-size: 16px; font-weight: 800; letter-spacing: -.02em; }
+.ver-stat-lbl  { font-size: 9px; color: var(--t3); margin-top: 2px; text-transform: uppercase; letter-spacing: .06em; }
+.ver-rate-bar {
+  height: 4px;
+  background: rgba(148,163,184,.1);
+  border-radius: 2px;
+  margin-top: 8px;
+  overflow: hidden;
+}
+.ver-rate-fill {
+  height: 100%;
+  border-radius: 2px;
+  transition: width .6s ease;
+}
+
+/* ── Performance Comparison Table ────────────────────────────── */
+.ver-compare-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+.ver-compare-table th {
+  font-size: 9px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .08em;
+  color: var(--t3);
+  padding: 6px 10px;
+  text-align: left;
+  border-bottom: 1px solid rgba(148,163,184,.08);
+}
+.ver-compare-table td {
+  padding: 9px 10px;
+  border-bottom: 1px solid rgba(148,163,184,.05);
+  color: var(--t2);
+  vertical-align: middle;
+}
+.ver-compare-table tr:last-child td { border-bottom: none; }
+.ver-compare-table tr:hover td { background: rgba(139,92,246,.03); }
+.ver-compare-table .cur-ver td { background: rgba(139,92,246,.04); }
+.ver-compare-table .cur-ver td:first-child { border-left: 2px solid var(--purple); }
+
+/* ── Highlights (Best / Hardest) ─────────────────────────────── */
+.ver-highlights {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+.ver-highlight-card {
+  border-radius: 12px;
+  padding: 14px;
+  border: 1px solid var(--border);
+}
+.ver-highlight-card.best    { border-color: rgba(34,197,94,.25); background: rgba(34,197,94,.04); }
+.ver-highlight-card.hardest { border-color: rgba(239,68,68,.25); background: rgba(239,68,68,.04); }
+.ver-hl-label { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .08em; color: var(--t3); margin-bottom: 6px; }
+.ver-hl-val   { font-size: 22px; font-weight: 800; }
+.ver-hl-sub   { font-size: 10px; color: var(--t2); margin-top: 3px; }
+
+/* ── Edit Modal — Scope Selector ─────────────────────────────── */
+#h-scope-row {
+  background: rgba(139,92,246,.05);
+  border: 1px solid rgba(139,92,246,.15);
+  border-radius: 12px;
+  padding: 14px 16px;
+  display: none;  /* shown only in edit mode */
+}
+#h-scope-row.visible { display: block; }
+.scope-selector-label {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .08em;
+  color: var(--t3);
+  margin-bottom: 10px;
+  display: block;
+}
+.scope-option {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 9px 10px;
+  border-radius: 9px;
+  cursor: pointer;
+  border: 1px solid transparent;
+  transition: all .15s;
+  margin-bottom: 6px;
+  position: relative;
+}
+.scope-option:last-child { margin-bottom: 0; }
+.scope-option:hover { background: rgba(139,92,246,.06); border-color: rgba(139,92,246,.15); }
+.scope-option.active { background: rgba(139,92,246,.1); border-color: rgba(139,92,246,.25); }
+.scope-radio {
+  width: 16px; height: 16px;
+  border-radius: 50%;
+  border: 2px solid rgba(148,163,184,.35);
+  flex-shrink: 0;
+  margin-top: 1px;
+  display: flex; align-items: center; justify-content: center;
+  transition: all .15s;
+}
+.scope-option.active .scope-radio {
+  border-color: var(--purple);
+  background: var(--purple);
+}
+.scope-radio::after {
+  content: '';
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  background: #fff;
+  display: none;
+}
+.scope-option.active .scope-radio::after { display: block; }
+.scope-text-main { font-size: 12px; font-weight: 600; }
+.scope-text-sub  { font-size: 10px; color: var(--t3); margin-top: 2px; }
+.scope-recommended {
+  font-size: 8px;
+  font-weight: 700;
+  background: rgba(34,197,94,.15);
+  color: #4ade80;
+  padding: 1px 6px;
+  border-radius: 20px;
+  text-transform: uppercase;
+  letter-spacing: .06em;
+  margin-left: 6px;
+  vertical-align: middle;
+}
+
+/* ── Target field badge in habit list ────────────────────────── */
+.habit-target-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 9.5px;
+  font-weight: 600;
+  color: var(--amber);
+  background: rgba(245,158,11,.08);
+  padding: 1px 7px;
+  border-radius: 20px;
+  border: 1px solid rgba(245,158,11,.18);
+}
+
+/* ── Version badge in matrix ─────────────────────────────────── */
+.ver-badge {
+  font-size: 8px;
+  font-weight: 700;
+  background: rgba(139,92,246,.18);
+  color: var(--plite);
+  padding: 0 4px;
+  border-radius: 4px;
+  vertical-align: middle;
+  margin-left: 3px;
+}
+
+/* ── Matrix cell tooltip (via title attr) — custom tooltip ───── */
+.mx-cell-tip {
+  position: relative;
+}
+.mx-cell-tip:hover::after {
+  content: attr(data-tip);
+  position: absolute;
+  bottom: calc(100% + 6px);
+  left: 50%;
+  transform: translateX(-50%);
+  background: #1e2d4a;
+  color: #f1f5f9;
+  font-size: 10px;
+  font-weight: 500;
+  padding: 4px 8px;
+  border-radius: 6px;
+  white-space: nowrap;
+  z-index: 200;
+  border: 1px solid rgba(139,92,246,.25);
+  pointer-events: none;
+  font-family: 'Inter', sans-serif;
+}
+
+/* ── Section headings inside drawer ─────────────────────────── */
+.hdd-section-title {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .1em;
+  color: var(--t3);
+  padding-bottom: 8px;
+  border-bottom: 1px solid rgba(148,163,184,.07);
+  margin-bottom: 12px;
+}
+
+/* ── Responsive ─────────────────────────────────────────────── */
+@media (max-width: 640px) {
+  .habit-detail-drawer { width: 100vw; }
+  .ver-stats-row { grid-template-columns: repeat(2, 1fr); }
+  .ver-highlights { grid-template-columns: 1fr; }
+  .ver-compare-table { font-size: 11px; }
+}

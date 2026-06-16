@@ -38,6 +38,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <link rel="stylesheet" href="/css/planner.css">
+<link rel="stylesheet" href="/css/versioning.css">
 <style>
 :root{--bg:#050912;--bg2:#08101e;--card:rgba(5,10,23,0.75);--border:rgba(148,163,184,0.08);--purple:#8b5cf6;--plite:#a78bfa;--blue:#3b82f6;--green:#22c55e;--red:#ef4444;--amber:#f59e0b;--text:#f1f5f9;--t2:#94a3b8;--t3:#64748b;--sw:215px}
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
@@ -611,11 +612,44 @@ body{font-family:'Inter',sans-serif;background-color:#050912;background-image:ra
         <div class="fg"><label class="fl">Reminder</label><input class="fi" id="h-rem" type="time" value="07:00"></div>
         <div class="fg"><label class="fl">Notes</label><input class="fi" id="h-note" placeholder="Optional..."></div>
       </div>
+      <div class="fg"><label class="fl">🎯 Target <span style="font-size:10px;color:var(--t3);font-weight:400">(optional — e.g. 5 km, 30 min, 20 pages)</span></label><input class="fi" id="h-target" placeholder="e.g. Run 5 km, Read 20 pages..."></div>
       <div class="fg"><label class="fl">Icon</label><div class="ig" id="h-icons"></div></div>
       <div class="fg"><label class="fl">Color</label><div class="csw" id="h-colors"></div></div>
+      <!-- Edit scope selector — shown only when editing -->
+      <div id="h-scope-row">
+        <span class="scope-selector-label">🔄 How should this edit apply?</span>
+        <div class="scope-option active" data-scope="future" onclick="setHabitEditScope('future',this)">
+          <div class="scope-radio"></div>
+          <div>
+            <div class="scope-text-main">Update future occurrences only <span class="scope-recommended">Recommended</span></div>
+            <div class="scope-text-sub">Creates a new version from today. Past entries are preserved exactly as they were.</div>
+          </div>
+        </div>
+        <div class="scope-option" data-scope="all" onclick="setHabitEditScope('all',this)">
+          <div class="scope-radio"></div>
+          <div>
+            <div class="scope-text-main">Update all history</div>
+            <div class="scope-text-sub">Updates name &amp; icon across all versions. Per-version targets are preserved.</div>
+          </div>
+        </div>
+      </div>
     </div>
     <div class="mf"><button class="btn bg" onclick="closeHM()">Cancel</button><button class="btn bp" onclick="saveHabit()">Save Habit</button></div>
   </div>
+</div>
+
+<!-- HABIT DETAIL DRAWER -->
+<div class="habit-detail-overlay" id="habit-detail-overlay" onclick="closeHabitDetail()"></div>
+<div class="habit-detail-drawer" id="habit-detail-drawer">
+  <div class="hdd-header">
+    <div class="hdd-icon" id="hdd-icon-el">💪</div>
+    <div>
+      <div class="hdd-title" id="hdd-name-el">Habit Detail</div>
+      <div class="hdd-sub" id="hdd-sub-el"></div>
+    </div>
+    <button class="hdd-close" onclick="closeHabitDetail()">✕</button>
+  </div>
+  <div class="hdd-body" id="hdd-body"></div>
 </div>
 
 <!-- GOAL MODAL -->
@@ -709,7 +743,7 @@ const MOODS={amazing:'🚀',productive:'⚡',good:'😊',okay:'😐',tired:'😴
 const GOAL_ICONS=['🎯','📚','💪','💼','🌱','🏠','💰','🎨','🎵','✈️','🤖','⚖️','🏃','🧠','🌍','🎓'];
 
 // ── STATE ──
-let S={habits:[],completions:{},missReasons:{},goals:[],journal:[],user:{name:'Bhavesh',email:'bhavesh@momentum.app'},settings:{reminders:true,streaks:true},demoPurged:true};
+let S={habits:[],completions:{},completionMeta:{},missReasons:{},goals:[],journal:[],user:{name:'Bhavesh',email:'bhavesh@momentum.app'},settings:{reminders:true,streaks:true},demoPurged:true};
 let mxYear=new Date().getFullYear(),mxMonth=new Date().getMonth();
 let curPage='dashboard',charts={};
 let selMoodVal='good',jCalY=new Date().getFullYear(),jCalM=new Date().getMonth();
@@ -725,6 +759,8 @@ function load(){
       // Migrate: add tasks and reflections if not present
       if(!S.tasks)S.tasks=[];
       if(!S.reflections)S.reflections={};
+      // Migrate: add completionMeta if not present
+      if(!S.completionMeta)S.completionMeta={};
 
       // Clear demo data on first load after this change
       if(!S.demoPurged){
@@ -748,6 +784,7 @@ function seedDefaults(){
   S.goals=[];
   S.journal=[];
   S.completions={};
+  S.completionMeta={};
   S.missReasons={};
   S.tasks=[];
   S.reflections={};
@@ -1186,7 +1223,7 @@ function toast(msg,type='info'){const ico={success:'✅',error:'❌',info:'ℹ�
 
 // ── MODAL CLOSE ON BACKDROP ──
 document.querySelectorAll('.mo').forEach(mo=>{mo.addEventListener('click',function(e){if(e.target===this){if(this.id==='m-habit')closeHM();else if(this.id==='m-goal')closeGM();else if(this.id==='m-miss')closeMM();else if(this.id==='m-confirm')closeConf();else if(this.id==='m-task')closeTaskModal();}});});
-document.addEventListener('keydown',e=>{if(e.key==='Escape'){closeHM();closeGM();closeMM();closeConf();if(typeof closeTaskModal!=='undefined')closeTaskModal();}});
+document.addEventListener('keydown',e=>{if(e.key==='Escape'){closeHM();closeGM();closeMM();closeConf();if(typeof closeTaskModal!=='undefined')closeTaskModal();if(typeof closeHabitDetail!=='undefined')closeHabitDetail();}});
 
 // ── INIT ──
 load();
@@ -1195,6 +1232,9 @@ go('dashboard');
 
 <!-- ── Planner Module ──────────────────────────────────────────────────── -->
 <script src="/js/planner.js"></script>
+
+<!-- ── Versioning Module ─────────────────────────────────────────────── -->
+<script src="/js/versioning.js"></script>
 
 <!-- ── PWA Update Notification ──────────────────────────────────────────── -->
 <div id="pwa-update-bar" style="
