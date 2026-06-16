@@ -1,6 +1,6 @@
 // Momentum Habit Tracker — Service Worker
 // Version bump here to force cache refresh on redeploy
-const CACHE_VERSION = 'v1.2.0';
+const CACHE_VERSION = 'v1.3.0';
 const CACHE_NAME = `momentum-${CACHE_VERSION}`;
 const OFFLINE_URL = '/';
 
@@ -17,6 +17,7 @@ const PRECACHE_ASSETS = [
   '/css/sidebar.css',
   '/css/planner.css',
   '/css/versioning.css',
+  '/css/realtime.css',
   '/js/app.js',
   '/js/data.js',
   '/js/dashboard.js',
@@ -27,6 +28,7 @@ const PRECACHE_ASSETS = [
   '/js/journal.js',
   '/js/planner.js',
   '/js/versioning.js',
+  '/js/realtime.js',
   '/icons/icon-192.png',
   '/icons/icon-512.png',
   '/icons/icon-192-maskable.png',
@@ -153,6 +155,28 @@ self.addEventListener('activate', event => {
       clients.forEach(client => {
         client.postMessage({ type: 'SW_UPDATED', version: CACHE_VERSION });
       });
+    })
+  );
+});
+
+// ─── NOTIFICATION CLICK HANDLING ──────────────────────────────────────────
+self.addEventListener('notificationclick', event => {
+  event.notification.close();
+  event.waitUntil(
+    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then(clients => {
+      for (let client of clients) {
+        if (client.url && 'focus' in client) {
+          client.postMessage({
+            type: 'NOTIFICATION_CLICK',
+            tag: event.notification.tag,
+            action: event.action
+          });
+          return client.focus();
+        }
+      }
+      if (self.clients.openWindow) {
+        return self.clients.openWindow('/');
+      }
     })
   );
 });

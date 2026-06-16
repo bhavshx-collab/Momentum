@@ -405,6 +405,8 @@ function openTaskModal(prefillDate, editId) {
   document.getElementById('t-cat').value  = task ? task.category  : 'Study';
   document.getElementById('t-date').value = task ? task.dueDate   : planTaskModal_prefillDate;
   document.getElementById('t-time').value = task ? (task.dueTime || '') : '';
+  document.getElementById('t-rem-date').value = task ? (task.reminderDate || '') : '';
+  document.getElementById('t-rem-time').value = task ? (task.reminderTime || '') : '';
   document.getElementById('t-notes').value = task ? (task.notes || '') : '';
 
   // Priority buttons
@@ -453,6 +455,8 @@ function saveTask() {
     priority:    pri,
     dueDate:     document.getElementById('t-date').value || fd(new Date()),
     dueTime:     document.getElementById('t-time').value,
+    reminderDate: document.getElementById('t-rem-date').value,
+    reminderTime: document.getElementById('t-rem-time').value,
     notes:       document.getElementById('t-notes').value.trim(),
     color,
     status:      eid ? (S.tasks.find(t => t.id === eid)?.status || 'pending') : 'pending',
@@ -461,6 +465,15 @@ function saveTask() {
   if (eid) {
     const idx = S.tasks.findIndex(t => t.id === eid);
     if (idx >= 0) S.tasks[idx] = { ...S.tasks[idx], ...data };
+    
+    // Reset notification trigger flags since task details updated
+    if (S.sentNotifications) {
+      delete S.sentNotifications[`task_reminder_${eid}`];
+      delete S.sentNotifications[`task_deadline_24h_${eid}`];
+      delete S.sentNotifications[`task_deadline_1h_${eid}`];
+      delete S.sentNotifications[`task_deadline_15m_${eid}`];
+    }
+    
     toast(`✅ "${title}" updated!`, 'success');
   } else {
     data.id = 't_' + Date.now();
@@ -477,6 +490,7 @@ function saveTask() {
   // Refresh planner or dashboard if visible
   if (curPage === 'planner') PlannerPage.render();
   if (curPage === 'dashboard') rDash();
+}
 }
 
 // ────────────────────────────────────────────────────────────────

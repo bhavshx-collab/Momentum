@@ -39,6 +39,7 @@
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <link rel="stylesheet" href="/css/planner.css">
 <link rel="stylesheet" href="/css/versioning.css">
+<link rel="stylesheet" href="/css/realtime.css">
 <style>
 :root{--bg:#050912;--bg2:#08101e;--card:rgba(5,10,23,0.75);--border:rgba(148,163,184,0.08);--purple:#8b5cf6;--plite:#a78bfa;--blue:#3b82f6;--green:#22c55e;--red:#ef4444;--amber:#f59e0b;--text:#f1f5f9;--t2:#94a3b8;--t3:#64748b;--sw:215px}
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
@@ -329,7 +330,23 @@ body{font-family:'Inter',sans-serif;background-color:#050912;background-image:ra
 <main class="main">
   <header class="topbar">
     <div><h1 id="tb-title">Dashboard</h1><p id="tb-sub">Monday, 15 June 2026</p></div>
+    <!-- Clock & Today's Status Bar -->
+    <div class="topbar-center">
+      <div class="realtime-clock" id="realtime-clock">
+        <span class="rt-time"><span style="margin-right:2px">🕒</span><span id="rt-time">--:--:-- --</span></span>
+        <span class="rt-date" id="rt-date">----</span>
+      </div>
+      <div class="today-status-bar" id="today-status-bar">
+        <span class="status-item">Habits: <strong id="rt-status-habits">0/0</strong></span>
+        <span class="status-item">Tasks: <strong id="rt-status-tasks">0/0</strong></span>
+        <span class="status-item">Score: <strong class="score-val" id="rt-status-score">0%</strong></span>
+      </div>
+    </div>
     <div class="topbar-r">
+      <!-- Notification Bell -->
+      <button class="btn bg btn-ico" id="noti-bell-btn" onclick="toggleNotificationCenter()" title="Notifications">
+        🔔<span class="noti-badge hid" id="noti-unread-count">0</span>
+      </button>
       <span class="badge bp2" id="tb-date">📅 Jun 15</span>
       <button class="btn bp" onclick="openHabitModal()">+ Add Habit</button>
     </div>
@@ -423,6 +440,7 @@ body{font-family:'Inter',sans-serif;background-color:#050912;background-image:ra
       <div class="analytics-tabs">
         <button class="analytics-tab-btn active" data-tab="habits" onclick="switchAnalyticsTab('habits')">🏃 Habits</button>
         <button class="analytics-tab-btn" data-tab="tasks" onclick="switchAnalyticsTab('tasks')">✅ Tasks</button>
+        <button class="analytics-tab-btn" data-tab="notifications" onclick="switchAnalyticsTab('notifications')">🔔 Notifications</button>
       </div>
       <!-- Habits panel -->
       <div id="analytics-panel-habits" class="analytics-tab-panel active">
@@ -476,6 +494,8 @@ body{font-family:'Inter',sans-serif;background-color:#050912;background-image:ra
           </div>
         </div>
       </div>
+      <!-- Notifications panel -->
+      <div id="analytics-panel-notifications" class="analytics-tab-panel"></div>
     </div>
 
     <!-- GOALS -->
@@ -529,11 +549,8 @@ body{font-family:'Inter',sans-serif;background-color:#050912;background-image:ra
           </div>
           <button class="btn bp" onclick="saveProfile()">Save Profile</button>
         </div>
-        <div class="card cp">
-          <div class="ct mb3">🔔 Notifications</div>
-          <div class="sr"><div class="sri"><div class="srl">Daily Reminders</div><div class="srd">Get reminded to track habits</div></div><div class="tgl on" onclick="togSet('reminders',this)"></div></div>
-          <div class="sr"><div class="sri"><div class="srl">Streak Alerts</div><div class="srd">Alert when streak at risk</div></div><div class="tgl on" onclick="togSet('streaks',this)"></div></div>
-        </div>
+        <!-- Notifications panel populated dynamically by realtime.js -->
+        <div id="settings-noti-content" style="grid-column: 1 / -1;"></div>
         <div class="card cp">
           <div class="ct mb3">💾 Data</div>
           <div class="sr"><div class="sri"><div class="srl">Export Data</div><div class="srd">Download JSON backup</div></div><button class="btn bs btn-sm" onclick="exportData()">📥 Export</button></div>
@@ -652,6 +669,27 @@ body{font-family:'Inter',sans-serif;background-color:#050912;background-image:ra
   <div class="hdd-body" id="hdd-body"></div>
 </div>
 
+<!-- NOTIFICATION DRAWER -->
+<div class="noti-drawer-overlay" id="noti-drawer-overlay" onclick="toggleNotificationCenter()"></div>
+<div class="noti-drawer" id="noti-drawer">
+  <div class="noti-drawer-header">
+    <div class="noti-drawer-title">🔔 Notification Center</div>
+    <button class="noti-drawer-close" onclick="toggleNotificationCenter()">✕</button>
+  </div>
+  <div class="noti-filter-bar">
+    <button class="noti-filter-btn active" onclick="setNotiDrawerFilter('all', this)">All</button>
+    <button class="noti-filter-btn" onclick="setNotiDrawerFilter('habit', this)">Habits</button>
+    <button class="noti-filter-btn" onclick="setNotiDrawerFilter('task', this)">Tasks</button>
+    <button class="noti-filter-btn" onclick="setNotiDrawerFilter('system', this)">System</button>
+  </div>
+  <div class="noti-drawer-body" id="noti-list-container">
+    <!-- Populated dynamically -->
+  </div>
+  <div class="noti-drawer-footer">
+    <button class="btn bg w100" style="justify-content:center" onclick="clearAllNotificationHistory()">🗑️ Clear History</button>
+  </div>
+</div>
+
 <!-- GOAL MODAL -->
 <div id="m-goal" class="mo hid">
   <div class="mb">
@@ -722,6 +760,10 @@ body{font-family:'Inter',sans-serif;background-color:#050912;background-image:ra
       <div class="fr">
         <div class="fg"><label class="fl">Due Time (Optional)</label><input class="fi" id="t-time" type="time"></div>
         <div class="fg"><label class="fl">Color Label</label><div class="csw" id="t-colors"></div></div>
+      </div>
+      <div class="fr">
+        <div class="fg"><label class="fl">Reminder Date (Optional)</label><input class="fi" id="t-rem-date" type="date"></div>
+        <div class="fg"><label class="fl">Reminder Time (Optional)</label><input class="fi" id="t-rem-time" type="time"></div>
       </div>
       <div class="fg"><label class="fl">Description</label><textarea class="fta" id="t-desc" placeholder="What needs to be done?" style="min-height:60px"></textarea></div>
       <div class="fg"><label class="fl">Notes</label><textarea class="fta" id="t-notes" placeholder="Any additional notes..." style="min-height:50px"></textarea></div>
@@ -1235,6 +1277,9 @@ go('dashboard');
 
 <!-- ── Versioning Module ─────────────────────────────────────────────── -->
 <script src="/js/versioning.js"></script>
+
+<!-- ── Realtime Module ───────────────────────────────────────────────── -->
+<script src="/js/realtime.js"></script>
 
 <!-- ── PWA Update Notification ──────────────────────────────────────────── -->
 <div id="pwa-update-bar" style="
