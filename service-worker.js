@@ -1,6 +1,6 @@
 // Momentum Habit Tracker — Service Worker
 // Version bump here to force cache refresh on redeploy
-const CACHE_VERSION = 'v1.0.0';
+const CACHE_VERSION = 'v1.1.0';
 const CACHE_NAME = `momentum-${CACHE_VERSION}`;
 const OFFLINE_URL = '/';
 
@@ -15,6 +15,7 @@ const PRECACHE_ASSETS = [
   '/css/analytics.css',
   '/css/pages.css',
   '/css/sidebar.css',
+  '/css/planner.css',
   '/js/app.js',
   '/js/data.js',
   '/js/dashboard.js',
@@ -23,6 +24,7 @@ const PRECACHE_ASSETS = [
   '/js/analytics.js',
   '/js/goals.js',
   '/js/journal.js',
+  '/js/planner.js',
   '/icons/icon-192.png',
   '/icons/icon-512.png',
   '/icons/icon-192-maskable.png',

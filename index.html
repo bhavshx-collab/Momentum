@@ -37,6 +37,7 @@
 <!-- ── Fonts & Scripts ───────────────────────────────────────────────── -->
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<link rel="stylesheet" href="/css/planner.css">
 <style>
 :root{--bg:#050912;--bg2:#08101e;--card:rgba(5,10,23,0.75);--border:rgba(148,163,184,0.08);--purple:#8b5cf6;--plite:#a78bfa;--blue:#3b82f6;--green:#22c55e;--red:#ef4444;--amber:#f59e0b;--text:#f1f5f9;--t2:#94a3b8;--t3:#64748b;--sw:215px}
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
@@ -307,6 +308,7 @@ body{font-family:'Inter',sans-serif;background-color:#050912;background-image:ra
     <div class="ni active" data-p="dashboard" onclick="go('dashboard')"><span class="ico">🏠</span>Dashboard</div>
     <div class="ni" data-p="matrix" onclick="go('matrix')"><span class="ico">📋</span>Habit Matrix</div>
     <div class="ni" data-p="habits" onclick="go('habits')"><span class="ico">✅</span>Manage Habits</div>
+    <div class="ni" data-p="planner" onclick="go('planner')"><span class="ico">📅</span>Planner</div>
     <div class="nav-sec">Insights</div>
     <div class="ni" data-p="analytics" onclick="go('analytics')"><span class="ico">📊</span>Analytics</div>
     <div class="ni" data-p="goals" onclick="go('goals')"><span class="ico">🎯</span>Goals</div>
@@ -337,21 +339,37 @@ body{font-family:'Inter',sans-serif;background-color:#050912;background-image:ra
     <!-- DASHBOARD -->
     <div id="page-dashboard" class="page active">
       <div class="sg" id="dash-stats"></div>
-      <div style="display:grid;grid-template-columns:1fr 270px;gap:14px">
+      <div style="display:grid;grid-template-columns:1fr 1fr 240px;gap:14px">
+        <!-- Today's Habits -->
         <div style="display:flex;flex-direction:column;gap:14px">
           <div class="card">
             <div class="ch"><span class="ct">✅ Today's Habits</span><span class="badge bp2" id="today-badge">0/0 Done</span></div>
             <div class="hcl" id="today-list"></div>
           </div>
         </div>
+        <!-- Today's Tasks -->
+        <div style="display:flex;flex-direction:column;gap:14px">
+          <div class="card">
+            <div class="ch">
+              <span class="ct">🔥 Due Today</span>
+              <div style="display:flex;align-items:center;gap:8px">
+                <span class="badge bp2" id="today-tasks-badge">0/0 Done</span>
+                <button class="btn bs btn-sm" onclick="openTaskModal()">+ Task</button>
+              </div>
+            </div>
+            <div id="today-tasks-list"></div>
+          </div>
+        </div>
+        <!-- Quick Actions + Streak Leaders -->
         <div style="display:flex;flex-direction:column;gap:14px">
           <div class="card cp">
             <div class="ct mb3">⚡ Quick Actions</div>
             <div style="display:flex;flex-direction:column;gap:8px">
-              <button class="btn bp w100" onclick="openHabitModal()">+ Add New Habit</button>
-              <button class="btn bs w100" onclick="go('matrix')">📋 View Matrix</button>
-              <button class="btn bg w100" onclick="go('journal')">📝 Write Journal</button>
-              <button class="btn bg w100" onclick="go('analytics')">📊 Analytics</button>
+              <button class="btn bp w100" onclick="openHabitModal()">+ New Habit</button>
+              <button class="btn bs w100" onclick="openTaskModal()">+ New Task</button>
+              <button class="btn bg w100" onclick="go('planner')">📅 Planner</button>
+              <button class="btn bg w100" onclick="go('matrix')">📋 Matrix</button>
+              <button class="btn bg w100" onclick="go('journal')">📝 Journal</button>
             </div>
           </div>
           <div class="card cp">
@@ -399,15 +417,63 @@ body{font-family:'Inter',sans-serif;background-color:#050912;background-image:ra
 
     <!-- ANALYTICS -->
     <div id="page-analytics" class="page">
-      <div class="mb4"><div class="stit">📊 Analytics</div><div class="ssub">Deep insights into your performance</div></div>
-      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:14px" id="insight-grid"></div>
-      <div class="ag">
-        <div class="card afc"><div class="ch"><span class="ct">📈 Completion Trend (12 Weeks)</span></div><div class="cp"><div class="cw"><canvas id="c-trend"></canvas></div></div></div>
-        <div class="card"><div class="ch"><span class="ct">🍩 Category Split</span></div><div class="cp"><div class="cw"><canvas id="c-donut"></canvas></div></div></div>
-        <div class="card"><div class="ch"><span class="ct">📅 Weekly Consistency</span></div><div class="cp"><div class="cw"><canvas id="c-weekly"></canvas></div></div></div>
-        <div class="card afc"><div class="ch"><span class="ct">⚠️ Most Missed Days</span></div><div class="cp" id="missed-grid"></div></div>
-        <div class="card"><div class="ch"><span class="ct">🏆 Habit Ranking</span></div><div class="cp"><div class="rl" id="ranking"></div></div></div>
-        <div class="card"><div class="ch"><span class="ct">🤔 Miss Reasons</span></div><div class="cp" id="miss-reasons"></div></div>
+      <div class="mb4"><div class="stit">📊 Analytics</div><div class="ssub">Deep insights into your habits and tasks</div></div>
+      <!-- Tab switcher -->
+      <div class="analytics-tabs">
+        <button class="analytics-tab-btn active" data-tab="habits" onclick="switchAnalyticsTab('habits')">🏃 Habits</button>
+        <button class="analytics-tab-btn" data-tab="tasks" onclick="switchAnalyticsTab('tasks')">✅ Tasks</button>
+      </div>
+      <!-- Habits panel -->
+      <div id="analytics-panel-habits" class="analytics-tab-panel active">
+        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:14px" id="insight-grid"></div>
+        <div class="ag">
+          <div class="card afc"><div class="ch"><span class="ct">📈 Completion Trend (12 Weeks)</span></div><div class="cp"><div class="cw"><canvas id="c-trend"></canvas></div></div></div>
+          <div class="card"><div class="ch"><span class="ct">🍩 Category Split</span></div><div class="cp"><div class="cw"><canvas id="c-donut"></canvas></div></div></div>
+          <div class="card"><div class="ch"><span class="ct">📅 Weekly Consistency</span></div><div class="cp"><div class="cw"><canvas id="c-weekly"></canvas></div></div></div>
+          <div class="card afc"><div class="ch"><span class="ct">⚠️ Most Missed Days</span></div><div class="cp" id="missed-grid"></div></div>
+          <div class="card"><div class="ch"><span class="ct">🏆 Habit Ranking</span></div><div class="cp"><div class="rl" id="ranking"></div></div></div>
+          <div class="card"><div class="ch"><span class="ct">🤔 Miss Reasons</span></div><div class="cp" id="miss-reasons"></div></div>
+        </div>
+      </div>
+      <!-- Tasks panel -->
+      <div id="analytics-panel-tasks" class="analytics-tab-panel">
+        <!-- Overview stats -->
+        <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:10px;margin-bottom:14px" id="task-analytics-cards"></div>
+        <div class="ag">
+          <!-- Smart Insights -->
+          <div class="card afc">
+            <div class="ch"><span class="ct">💡 Smart Insights</span></div>
+            <div class="cp"><div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px" id="smart-insights"></div></div>
+          </div>
+          <!-- Category completion -->
+          <div class="card">
+            <div class="ch"><span class="ct">🏷️ Category Completion</span></div>
+            <div class="cp" id="task-cat-chart"></div>
+          </div>
+          <!-- Day performance -->
+          <div class="card">
+            <div class="ch"><span class="ct">📅 Day Performance</span></div>
+            <div class="cp" id="task-day-perf"></div>
+          </div>
+          <!-- Productivity heatmap -->
+          <div class="card afc">
+            <div class="ch"><span class="ct">🟩 Productivity Heatmap (12 Weeks)</span><span class="txs tm">Combined habit + task score</span></div>
+            <div class="cp">
+              <div style="display:flex;gap:8px;align-items:center;margin-bottom:10px">
+                <div class="flex aic gap2"><div style="width:11px;height:11px;border-radius:2px;background:rgba(34,197,94,.75)"></div><span class="txs tm">Excellent</span></div>
+                <div class="flex aic gap2"><div style="width:11px;height:11px;border-radius:2px;background:rgba(34,197,94,.4)"></div><span class="txs tm">Good</span></div>
+                <div class="flex aic gap2"><div style="width:11px;height:11px;border-radius:2px;background:rgba(245,158,11,.5)"></div><span class="txs tm">Average</span></div>
+                <div class="flex aic gap2"><div style="width:11px;height:11px;border-radius:2px;background:rgba(239,68,68,.4)"></div><span class="txs tm">Poor</span></div>
+              </div>
+              <div class="prod-heatmap-grid" id="prod-heatmap"></div>
+            </div>
+          </div>
+          <!-- Most delayed tasks -->
+          <div class="card afc">
+            <div class="ch"><span class="ct">⏭️ Most Postponed Tasks</span></div>
+            <div class="cp" id="task-delayed"></div>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -477,6 +543,42 @@ body{font-family:'Inter',sans-serif;background-color:#050912;background-image:ra
           <div style="font-size:20px;font-weight:800;background:linear-gradient(135deg,#a78bfa,#60a5fa);-webkit-background-clip:text;-webkit-text-fill-color:transparent">Momentum</div>
           <div class="tsm tm mt3">Personal Growth OS · v1.0 · All data stored locally</div>
           <div class="mt3 flex gap2 jc"><span class="badge bp2">Dark Mode</span><span class="badge bb">localStorage</span><span class="badge bg2">Private</span></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- PLANNER -->
+    <div id="page-planner" class="page">
+      <div class="flex aic jb mb4">
+        <div><div class="stit">📅 Planner</div><div class="ssub">Daily tasks, productivity scores &amp; reflections</div></div>
+        <div class="flex gap2 aic">
+          <button class="btn bg btn-sm" onclick="plannerPrev()">‹ Prev</button>
+          <span class="fw6 tsm" id="planner-cal-title" style="min-width:130px;text-align:center"></span>
+          <button class="btn bg btn-sm" onclick="plannerNext()">Next ›</button>
+          <button class="btn bp btn-sm" onclick="openTaskModal()">+ Add Task</button>
+        </div>
+      </div>
+      <div class="planner-layout">
+        <!-- Left: stats + category filters -->
+        <div class="planner-left">
+          <div class="task-stats-grid" id="planner-stats"></div>
+          <div class="card cp">
+            <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--t3);margin-bottom:10px">Filter by Category</div>
+            <div class="cat-filter-list" id="planner-cat-filters"></div>
+          </div>
+        </div>
+        <!-- Mid: month calendar -->
+        <div class="planner-mid">
+          <div class="card cp">
+            <div class="planner-cal-header">
+              <div style="font-size:13px;font-weight:700" id="planner-cal-title2"></div>
+            </div>
+            <div class="planner-cal-grid" id="planner-cal-grid"></div>
+          </div>
+        </div>
+        <!-- Right: day detail panel -->
+        <div class="planner-right">
+          <div class="card" id="planner-detail-panel"></div>
         </div>
       </div>
     </div>
@@ -558,6 +660,42 @@ body{font-family:'Inter',sans-serif;background-color:#050912;background-image:ra
   </div>
 </div>
 
+<!-- TASK MODAL -->
+<div id="m-task" class="mo hid">
+  <div class="mb" style="max-width:500px">
+    <div class="mh"><h3 id="tm-title">✨ Add Task</h3><button class="btn bg btn-ico" onclick="closeTaskModal()">✕</button></div>
+    <div class="mbd">
+      <input type="hidden" id="t-eid">
+      <div class="fg"><label class="fl">Task Title *</label><input class="fi" id="t-name" placeholder="e.g. Complete AIML Assignment..."></div>
+      <div class="fr">
+        <div class="fg"><label class="fl">Category</label>
+          <select class="fsl" id="t-cat">
+            <option>Study</option><option>Coding</option><option>Fitness</option>
+            <option>Career</option><option>Finance</option><option>Personal</option><option>Other</option>
+          </select>
+        </div>
+        <div class="fg"><label class="fl">Due Date</label><input class="fi" id="t-date" type="date"></div>
+      </div>
+      <div class="fg">
+        <label class="fl">Priority</label>
+        <div class="priority-btns">
+          <button type="button" class="priority-pick-btn" data-pri="low" onclick="selectPriority(this,'low')">🟢 Low</button>
+          <button type="button" class="priority-pick-btn sel-medium" data-pri="medium" onclick="selectPriority(this,'medium')">🟡 Medium</button>
+          <button type="button" class="priority-pick-btn" data-pri="high" onclick="selectPriority(this,'high')">🟠 High</button>
+          <button type="button" class="priority-pick-btn" data-pri="urgent" onclick="selectPriority(this,'urgent')">🔴 Urgent</button>
+        </div>
+      </div>
+      <div class="fr">
+        <div class="fg"><label class="fl">Due Time (Optional)</label><input class="fi" id="t-time" type="time"></div>
+        <div class="fg"><label class="fl">Color Label</label><div class="csw" id="t-colors"></div></div>
+      </div>
+      <div class="fg"><label class="fl">Description</label><textarea class="fta" id="t-desc" placeholder="What needs to be done?" style="min-height:60px"></textarea></div>
+      <div class="fg"><label class="fl">Notes</label><textarea class="fta" id="t-notes" placeholder="Any additional notes..." style="min-height:50px"></textarea></div>
+    </div>
+    <div class="mf"><button class="btn bg" onclick="closeTaskModal()">Cancel</button><button class="btn bp" onclick="saveTask()">Save Task</button></div>
+  </div>
+</div>
+
 <div id="toasts"></div>
 
 <script>
@@ -584,6 +722,9 @@ function load(){
     if(r){
       S={...S,...JSON.parse(r)};
       if(!S.missReasons)S.missReasons={};
+      // Migrate: add tasks and reflections if not present
+      if(!S.tasks)S.tasks=[];
+      if(!S.reflections)S.reflections={};
 
       // Clear demo data on first load after this change
       if(!S.demoPurged){
@@ -592,6 +733,8 @@ function load(){
         S.goals=[];
         S.journal=[];
         S.missReasons={};
+        S.tasks=[];
+        S.reflections={};
         S.demoPurged=true;
         save();
       }
@@ -606,6 +749,8 @@ function seedDefaults(){
   S.journal=[];
   S.completions={};
   S.missReasons={};
+  S.tasks=[];
+  S.reflections={};
   S.demoPurged=true;
   save();
 }
@@ -651,14 +796,14 @@ function overallStats(){
 function go(page){
   curPage=page;
   document.querySelectorAll('.ni').forEach(el=>el.classList.toggle('active',el.dataset.p===page));
-  const titles={dashboard:'Dashboard',matrix:'Habit Matrix',habits:'Manage Habits',analytics:'Analytics',goals:'Goals',journal:'Journal',settings:'Settings'};
-  const subs={dashboard:'Your personal growth command center',matrix:'Spreadsheet-style habit tracker — click cells to toggle',habits:'Add, edit and organise your habits',analytics:'Deep insights into your performance',goals:'Long-term goals with milestones',journal:'Daily reflections and mood tracking',settings:'Customise your Momentum experience'};
+  const titles={dashboard:'Dashboard',matrix:'Habit Matrix',habits:'Manage Habits',planner:'Planner',analytics:'Analytics',goals:'Goals',journal:'Journal',settings:'Settings'};
+  const subs={dashboard:'Your personal growth command center',matrix:'Spreadsheet-style habit tracker — click cells to toggle',habits:'Add, edit and organise your habits',planner:'Daily tasks, productivity scores & reflections',analytics:'Deep insights into your habits and tasks',goals:'Long-term goals with milestones',journal:'Daily reflections and mood tracking',settings:'Customise your Momentum experience'};
   document.getElementById('tb-title').textContent=titles[page]||page;
   document.getElementById('tb-sub').textContent=subs[page]||'';
   document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
   const el=document.getElementById('page-'+page);if(el)el.classList.add('active');
   if(page!=='analytics')destroyCharts();
-  const fns={dashboard:rDash,matrix:rMatrix,habits:()=>renderHabits('all'),analytics:rAnalytics,goals:rGoals,journal:rJournal,settings:rSettings};
+  const fns={dashboard:rDash,matrix:rMatrix,habits:()=>renderHabits('all'),planner:()=>PlannerPage.render(),analytics:rAnalytics,goals:rGoals,journal:rJournal,settings:rSettings};
   if(fns[page])fns[page]();
   document.querySelector('.content').scrollTo(0,0);
 }
@@ -676,6 +821,8 @@ function rDash(){
     <div class="card sc cg"><div class="si">📈</div><div class="sv">${stats.successRate}%</div><div class="sl">Success Rate</div><div class="ss">last 30 days</div></div>
     <div class="card sc ca"><div class="si">✅</div><div class="sv">${stats.doneToday}<span style="font-size:16px;font-weight:500;color:var(--t2)">/${stats.total}</span></div><div class="sl">Done Today</div><div class="ss">${stats.total>0?Math.round((stats.doneToday/stats.total)*100):0}% complete</div></div>`;
   document.getElementById('today-badge').textContent=`${stats.doneToday}/${stats.total} Done`;
+  // Render Today's Tasks widget
+  rTodayTasks();
   const list=document.getElementById('today-list');
   if(!S.habits.length){list.innerHTML=`<div class="es" style="padding:28px"><div class="ei">✨</div><p class="t2">No habits yet.</p><button class="btn bp mt3" onclick="openHabitModal()">+ Add Habit</button></div>`;return;}
   list.innerHTML=S.habits.map(h=>{
@@ -1038,13 +1185,16 @@ function resetData(){document.getElementById('conf-icon').textContent='⚠️';d
 function toast(msg,type='info'){const ico={success:'✅',error:'❌',info:'ℹ️'};const el=document.createElement('div');el.className=`toast ${type}`;el.innerHTML=`<span>${ico[type]}</span><span>${msg}</span>`;document.getElementById('toasts').appendChild(el);setTimeout(()=>el.remove(),3200);}
 
 // ── MODAL CLOSE ON BACKDROP ──
-document.querySelectorAll('.mo').forEach(mo=>{mo.addEventListener('click',function(e){if(e.target===this){if(this.id==='m-habit')closeHM();else if(this.id==='m-goal')closeGM();else if(this.id==='m-miss')closeMM();else if(this.id==='m-confirm')closeConf();}});});
-document.addEventListener('keydown',e=>{if(e.key==='Escape'){closeHM();closeGM();closeMM();closeConf();}});
+document.querySelectorAll('.mo').forEach(mo=>{mo.addEventListener('click',function(e){if(e.target===this){if(this.id==='m-habit')closeHM();else if(this.id==='m-goal')closeGM();else if(this.id==='m-miss')closeMM();else if(this.id==='m-confirm')closeConf();else if(this.id==='m-task')closeTaskModal();}});});
+document.addEventListener('keydown',e=>{if(e.key==='Escape'){closeHM();closeGM();closeMM();closeConf();if(typeof closeTaskModal!=='undefined')closeTaskModal();}});
 
 // ── INIT ──
 load();
 go('dashboard');
 </script>
+
+<!-- ── Planner Module ──────────────────────────────────────────────────── -->
+<script src="/js/planner.js"></script>
 
 <!-- ── PWA Update Notification ──────────────────────────────────────────── -->
 <div id="pwa-update-bar" style="
