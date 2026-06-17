@@ -491,7 +491,6 @@ function saveTask() {
   if (curPage === 'planner') PlannerPage.render();
   if (curPage === 'dashboard') rDash();
 }
-}
 
 // ────────────────────────────────────────────────────────────────
 //  TASK CRUD
