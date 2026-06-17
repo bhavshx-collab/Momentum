@@ -553,7 +553,7 @@ function openHabitModalVersioned(eid) {
  */
 function scVersioned(hid, ds, v) {
   S.completions[hid + '_' + ds] = v;
-  if (v === 'dn') {
+  if (v === 'dn' || v === 'dn_late') {
     recordCompletionSnapshot(hid, ds);
   } else {
     removeCompletionSnapshot(hid, ds);
@@ -662,7 +662,10 @@ function rMatrixVersioned() {
     const verBadge = vCount > 1 ? `<span class="ver-badge">v${vCount}</span>` : '';
     tbl += `<tr class="mhr"><td class="mnc"><div class="flex aic gap2"><span class="mnci">${activeVer.icon}</span><span class="mnct" title="${activeVer.name}">${activeVer.name}${verBadge}</span></div></td>`;
     days.forEach(({ ds, isFuture, isToday, adj }) => {
-      const s = gc(hb.id, ds), sc2 = s === 'dn' ? 'dn' : s === 'ms' ? 'ms' : s === 'pt' ? 'pt' : '', ic = s === 'dn' ? '✓' : s === 'ms' ? '✗' : s === 'pt' ? '~' : '', sep = adj === 6 ? 'wsp' : '';
+      const s = gc(hb.id, ds);
+      const sc2 = s === 'dn' ? 'dn' : s === 'dn_late' ? 'dn_late' : s === 'ms' ? 'ms' : s === 'pt' ? 'pt' : '';
+      const ic = (s === 'dn' || s === 'dn_late') ? '✓' : s === 'ms' ? '✗' : s === 'pt' ? '~' : '';
+      const sep = adj === 6 ? 'wsp' : '';
       // Version-aware tooltip
       const tip = !isFuture ? getCellTooltip(hb.id, ds) : '';
       tbl += `<td class="mxc ${isFuture ? 'fut' : ''} ${sep} ${tip ? 'mx-cell-tip' : ''}" id="cell-${hb.id}-${ds.replace(/-/g,'')}" ${tip ? `data-tip="${tip}"` : ''} ${!isFuture ? `onclick="clickCell('${hb.id}','${ds}',this)"` : ''}><div class="ci ${sc2} ${isToday ? 'tc2' : ''} ${isFuture ? 'fut' : ''}">${ic}</div></td>`;
@@ -697,6 +700,138 @@ function rMatrixVersioned() {
   }
 })();
 
+function clickCellVersioned(hid, ds, el) {
+  const todayStr = fd(new Date());
+  const yesterday = new Date();
+  yesterday.setDate(yesterday.getDate() - 1);
+  const yesterdayStr = fd(yesterday);
+
+  if (ds === todayStr) {
+    // Normal cycle for today
+    const next = cycleC(hid, ds);
+    syncMatrixCellUI(el, next, ds);
+    if (next === 'ms') showMissModal(hid, ds);
+  } else if (ds === yesterdayStr) {
+    // Yesterday cycle: empty -> dn_late -> pt -> ms -> empty
+    const cur = gc(hid, ds);
+    let next = '';
+    if (cur === '') next = 'dn_late';
+    else if (cur === 'dn_late') next = 'pt';
+    else if (cur === 'pt') next = 'ms';
+    else if (cur === 'ms') next = '';
+    
+    sc(hid, ds, next);
+    syncMatrixCellUI(el, next, ds);
+    if (next === 'ms') showMissModal(hid, ds);
+  } else {
+    // Older than yesterday: require reason
+    const cur = gc(hid, ds);
+    let next = '';
+    if (cur === '') next = 'dn';
+    else if (cur === 'dn' || cur === 'dn_late') next = 'pt';
+    else if (cur === 'pt') next = 'ms';
+    else if (cur === 'ms') next = '';
+
+    openAuditModal(hid, ds, next);
+  }
+}
+
+function syncMatrixCellUI(el, next, ds) {
+  const inner = el.querySelector('.ci');
+  if (!inner) return;
+  inner.className = 'ci' + (ds === ts() ? ' tc2' : '');
+  
+  if (next === 'dn') {
+    inner.classList.add('dn');
+    inner.textContent = '✓';
+  } else if (next === 'dn_late') {
+    inner.classList.add('dn_late');
+    inner.textContent = '✓';
+  } else if (next === 'ms') {
+    inner.classList.add('ms');
+    inner.textContent = '✗';
+  } else if (next === 'pt') {
+    inner.classList.add('pt');
+    inner.textContent = '~';
+  } else {
+    inner.textContent = '';
+  }
+  
+  if (typeof updateDayTotal === 'function') {
+    updateDayTotal(ds);
+  }
+  
+  const hid = hidFromCell(el);
+  const hb = S.habits.find(x => x.id === hid);
+  const lb = { dn: '✅ Done', dn_late: '✅ Done Late', ms: '❌ Missed', pt: '🟡 Partial', '': '⚫ Cleared' };
+  toast(`${hb ? hb.name : 'Habit'} → ${lb[next] || 'Updated'}`, (next === 'dn' || next === 'dn_late') ? 'success' : 'info');
+  
+  if (typeof rMxSummary === 'function') {
+    rMxSummary(null, S.habits);
+  }
+}
+
+function hidFromCell(el) {
+  const parts = el.id.split('-');
+  return parts.slice(1, parts.length - 1).join('-');
+}
+
+function openAuditModal(hid, ds, val) {
+  const modal = document.getElementById('m-audit');
+  if (!modal) return;
+  document.getElementById('audit-hid').value = hid;
+  document.getElementById('audit-ds').value = ds;
+  document.getElementById('audit-val').value = val;
+  document.getElementById('audit-comment').value = '';
+  document.getElementById('audit-reason').value = 'Forgot To Log';
+  modal.classList.remove('hid');
+}
+
+function closeAuditModal() {
+  const modal = document.getElementById('m-audit');
+  if (modal) modal.classList.add('hid');
+}
+
+function saveAuditChange() {
+  const hid = document.getElementById('audit-hid').value;
+  const ds = document.getElementById('audit-ds').value;
+  const val = document.getElementById('audit-val').value;
+  const reason = document.getElementById('audit-reason').value;
+  const comment = document.getElementById('audit-comment').value.trim();
+
+  const oldVal = gc(hid, ds);
+  sc(hid, ds, val);
+  
+  // Record audit log entry
+  const hb = S.habits.find(x => x.id === hid);
+  const logEntry = {
+    id: 'al_' + Date.now(),
+    timestamp: new Date().toISOString(),
+    habitId: hid,
+    habitName: hb ? hb.name : 'Unknown',
+    targetDate: ds,
+    oldValue: oldVal,
+    newValue: val,
+    reason: reason,
+    comment: comment
+  };
+  S.auditLog = S.auditLog || [];
+  S.auditLog.unshift(logEntry);
+  save();
+  
+  closeAuditModal();
+  
+  const cellId = `cell-${hid}-${ds.replace(/-/g,'')}`;
+  const cellEl = document.getElementById(cellId);
+  if (cellEl) {
+    syncMatrixCellUI(cellEl, val, ds);
+  } else {
+    rMatrix();
+  }
+  
+  toast('Audit reason logged and change saved!', 'success');
+}
+
 function _installVersioning() {
   // Migrate existing data
   verEnsureData();
@@ -707,6 +842,7 @@ function _installVersioning() {
   window.sc                 = scVersioned;
   window.renderHabits       = renderHabitsVersioned;
   window.rMatrix            = rMatrixVersioned;
+  window.clickCell          = clickCellVersioned;
 
   // Expose new globals
   window.openHabitDetail    = openHabitDetail;
@@ -718,4 +854,9 @@ function _installVersioning() {
   window.getVersionForDate  = getVersionForDate;
   window.getActiveVersion   = getActiveVersion;
   window.getVersionStats    = getVersionStats;
+  
+  // Audit modal functions
+  window.openAuditModal     = openAuditModal;
+  window.closeAuditModal    = closeAuditModal;
+  window.saveAuditChange    = saveAuditChange;
 }

@@ -1,0 +1,276 @@
+/* ==========================================================================
+   FOCUS HUB STYLING
+   ========================================================================== */
+
+/* Layout & Workspace */
+.focus-timer-card {
+  box-shadow: 0 12px 48px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+}
+
+.mode-pill {
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  border: 1px solid rgba(148, 163, 184, 0.08);
+}
+
+.mode-pill.active {
+  background: linear-gradient(135deg, rgba(139, 92, 246, 0.25), rgba(99, 102, 241, 0.2));
+  color: var(--plite);
+  border-color: rgba(139, 92, 246, 0.45);
+  box-shadow: 0 0 12px rgba(139, 92, 246, 0.15);
+}
+
+/* Category Pills */
+.category-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: 20px;
+  background: rgba(148, 163, 184, 0.04);
+  border: 1px solid var(--border);
+  color: var(--t2);
+  font-size: 11.5px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+  user-select: none;
+}
+
+.category-pill:hover {
+  background: rgba(139, 92, 246, 0.08);
+  border-color: rgba(139, 92, 246, 0.25);
+  color: var(--text);
+}
+
+.category-pill.selected {
+  background: rgba(139, 92, 246, 0.16);
+  border-color: var(--purple);
+  color: var(--plite);
+  box-shadow: 0 0 10px rgba(139, 92, 246, 0.15);
+  font-weight: 600;
+}
+
+/* Circular Progress Ring */
+.progress-ring {
+  display: block;
+  margin: 0 auto;
+}
+
+.progress-ring-circle-bg {
+  stroke: rgba(148, 163, 184, 0.04);
+}
+
+.progress-ring-circle {
+  transition: stroke-dashoffset 0.1s linear, stroke 0.3s;
+}
+
+/* Streaks Widget */
+.focus-streak-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+  background: rgba(148, 163, 184, 0.03);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  transition: transform 0.2s;
+}
+
+.focus-streak-item:hover {
+  transform: translateX(3px);
+  background: rgba(139, 92, 246, 0.04);
+  border-color: rgba(139, 92, 246, 0.15);
+}
+
+.focus-streak-icon {
+  font-size: 20px;
+  width: 38px;
+  height: 38px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  jc: center;
+  background: rgba(139, 92, 246, 0.1);
+  color: var(--plite);
+  flex-shrink: 0;
+}
+
+.focus-streak-info {
+  flex: 1;
+}
+
+.focus-streak-title {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--t3);
+}
+
+.focus-streak-val {
+  font-size: 15px;
+  font-weight: 800;
+  color: var(--text);
+  margin-top: 1px;
+}
+
+/* Productivity Heatmap */
+.focus-heatmap-grid {
+  display: grid;
+  grid-template-columns: repeat(12, 1fr);
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.focus-heatmap-col {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.focus-heatmap-cell {
+  aspect-ratio: 1;
+  border-radius: 3px;
+  background: rgba(148, 163, 184, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.02);
+  cursor: pointer;
+  position: relative;
+  transition: all 0.15s;
+}
+
+.focus-heatmap-cell:hover {
+  transform: scale(1.15);
+  z-index: 10;
+  box-shadow: 0 0 10px rgba(139, 92, 246, 0.4);
+}
+
+.focus-heatmap-cell.level-0 {
+  background: rgba(148, 163, 184, 0.04);
+}
+
+.focus-heatmap-cell.level-1 {
+  background: rgba(239, 68, 68, 0.35); /* Poor: Red */
+  border-color: rgba(239, 68, 68, 0.45);
+}
+
+.focus-heatmap-cell.level-2 {
+  background: rgba(245, 158, 11, 0.4); /* Average: Orange/Yellow */
+  border-color: rgba(245, 158, 11, 0.5);
+}
+
+.focus-heatmap-cell.level-3 {
+  background: rgba(34, 197, 94, 0.4); /* Good: Green */
+  border-color: rgba(34, 197, 94, 0.55);
+}
+
+.focus-heatmap-cell.level-4 {
+  background: rgba(34, 197, 94, 0.85); /* Excellent: Dark Green */
+  border-color: rgba(34, 197, 94, 0.95);
+  box-shadow: 0 0 8px rgba(34, 197, 94, 0.2);
+}
+
+/* Tooltip on Heatmap */
+.focus-heatmap-cell[data-tooltip]::before {
+  content: attr(data-tooltip);
+  position: absolute;
+  bottom: 125%;
+  left: 50%;
+  transform: translateX(-50%);
+  background: #111827;
+  border: 1px solid rgba(139, 92, 246, 0.3);
+  color: #f3f4f6;
+  font-size: 9px;
+  padding: 4px 8px;
+  border-radius: 6px;
+  white-space: nowrap;
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.15s, visibility 0.15s;
+  pointer-events: none;
+  z-index: 100;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+}
+
+.focus-heatmap-cell[data-tooltip]:hover::before {
+  opacity: 1;
+  visibility: visible;
+}
+
+/* Insights list */
+.focus-insight-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: rgba(148, 163, 184, 0.02);
+  border-left: 3px solid var(--purple);
+  font-size: 12px;
+  color: var(--t2);
+  line-height: 1.5;
+}
+
+.focus-insight-item.positive {
+  border-left-color: var(--green);
+}
+
+.focus-insight-item.alert {
+  border-left-color: var(--amber);
+}
+
+/* Patterns / Best Focus Time widgets */
+.pattern-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: rgba(148, 163, 184, 0.03);
+  border: 1px solid var(--border);
+}
+
+.pattern-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.pattern-icon {
+  font-size: 16px;
+  color: var(--plite);
+}
+
+.pattern-title {
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.pattern-val {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+/* Completed late badge in Calendar matrix */
+.ci.dn_late {
+  background: rgba(34, 197, 94, 0.15);
+  border-color: rgba(34, 197, 94, 0.4);
+  color: #4ade80;
+  position: relative;
+}
+
+.ci.dn_late::after {
+  content: '🕒';
+  font-size: 7px;
+  position: absolute;
+  bottom: -3px;
+  right: -3px;
+}
+
+/* Audit reason popup/form styles */
+.audit-log-badge {
+  font-size: 9px;
+  color: var(--t3);
+  margin-top: 2px;
+  display: block;
+}

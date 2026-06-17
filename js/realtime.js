@@ -392,10 +392,97 @@ function checkRemindersLoop() {
     checkMissedHabits(dateStr, now);
     checkDailyReview(dateStr, timeStr);
     checkTomorrowPreview(dateStr, timeStr);
+    
+    // Habit Status Engine: Auto-close check
+    const autoCloseTime = (S.habitStatusSettings && S.habitStatusSettings.autoCloseTime) || '23:59';
+    if (timeStr === autoCloseTime) {
+      autoClosePendingHabits(dateStr);
+    }
+    
+    // Habit Status Engine: Backfill window alert
+    const backfillAlertTime = (S.notificationSettings && S.notificationSettings.streakWarningTime) || '21:00';
+    if (timeStr === backfillAlertTime) {
+      checkBackfillWindowWarning(dateStr);
+    }
   }
 
   // Run seconds-sensitive task notifications (runs continuously)
   checkTaskReminders(now);
+}
+
+function autoClosePendingHabits(dateStr) {
+  realtimeEnsureData();
+  let countClosed = 0;
+  S.habits.forEach(h => {
+    const s = gc(h.id, dateStr);
+    if (s === '' || s === undefined) {
+      sc(h.id, dateStr, 'ms');
+      countClosed++;
+    }
+  });
+  if (countClosed > 0) {
+    save();
+    toast(`⏰ Auto-closed ${countClosed} pending habits to Missed.`, 'info');
+    if (S.habitStatusSettings.habitNotifications) {
+      triggerNotification(
+        '⚠️ Habits Closed',
+        `${countClosed} pending habits were auto-closed to Missed. You have 24 hours to mark them Completed Late.`,
+        'system',
+        () => go('dashboard')
+      );
+    }
+  }
+}
+
+function checkBackfillWindowWarning(dateStr) {
+  realtimeEnsureData();
+  if (!S.habitStatusSettings.habitNotifications) return;
+  
+  const yesterday = new Date();
+  yesterday.setDate(yesterday.getDate() - 1);
+  const yesterdayStr = fd(yesterday);
+  
+  // Find any incomplete/pending/missed yesterday's habits
+  const pendingBackfill = S.habits.filter(h => {
+    const s = gc(h.id, yesterdayStr);
+    return s === '' || s === undefined || s === 'ms';
+  });
+  
+  if (pendingBackfill.length > 0) {
+    triggerNotification(
+      '⏳ Backfill Window Alert',
+      `You have ${pendingBackfill.length} unlogged habits from yesterday. Log them before the 24h window closes!`,
+      'system',
+      () => go('dashboard')
+    );
+  }
+}
+
+function runRetroactiveHabitSweep() {
+  realtimeEnsureData();
+  const now = new Date();
+  let sweepCount = 0;
+  // Sweep the last 30 days starting from 2 days ago (yesterday is in backfill window)
+  for (let i = 2; i <= 30; i++) {
+    const checkDate = new Date(now);
+    checkDate.setDate(now.getDate() - i);
+    const ds = fd(checkDate);
+    
+    S.habits.forEach(h => {
+      // Check if habit existed at that date
+      if (h.createdAt && h.createdAt > ds) return;
+      
+      const s = gc(h.id, ds);
+      if (s === '' || s === undefined) {
+        sc(h.id, ds, 'ms');
+        sweepCount++;
+      }
+    });
+  }
+  if (sweepCount > 0) {
+    save();
+    console.log(`[Habit Status Engine] Retroactive sweep closed ${sweepCount} unlogged slots as Missed.`);
+  }
 }
 
 // 1. Habit Reminders
@@ -803,7 +890,10 @@ function handleNotificationItemClick(id) {
 
 function renderNotificationSettings() {
   realtimeEnsureData();
+  focusEnsureData();
   const settings = S.notificationSettings;
+  const focusSettings = S.focusSettings;
+  const habitSettings = S.habitStatusSettings;
   const container = document.getElementById('settings-noti-content');
   if (!container) return;
 
@@ -931,6 +1021,82 @@ function renderNotificationSettings() {
               <input type="time" class="time-picker-input" id="set-quiet-end" value="${settings.quietHoursEnd || '07:00'}" onchange="saveNotiTimeSetting('quietHoursEnd', this.value)">
             </div>
           </div>
+        </div>
+      </div>
+
+      <!-- FOCUS HUB SETTINGS -->
+      <div class="card cp">
+        <div class="ct mb3">🎯 Focus Hub Settings</div>
+        <div class="sr">
+          <div class="sri">
+            <div class="srl">Daily Focus Goal</div>
+            <div class="srd">Target focus hours per day</div>
+          </div>
+          <select class="fsl" style="width:100px;font-size:11px;padding:5px" onchange="saveFocusSetting('focusGoal', parseInt(this.value))">
+            <option value="2" ${focusSettings.focusGoal === 2 ? 'selected' : ''}>2 Hours ⌛</option>
+            <option value="4" ${focusSettings.focusGoal === 4 ? 'selected' : ''}>4 Hours 🎯</option>
+            <option value="6" ${focusSettings.focusGoal === 6 ? 'selected' : ''}>6 Hours 🔥</option>
+            <option value="8" ${focusSettings.focusGoal === 8 ? 'selected' : ''}>8 Hours ⚡</option>
+          </select>
+        </div>
+        <div class="sr">
+          <div class="sri">
+            <div class="srl">Pomodoro Duration</div>
+            <div class="srd">Default work interval length</div>
+          </div>
+          <select class="fsl" style="width:100px;font-size:11px;padding:5px" onchange="saveFocusSetting('pomodoroLength', parseInt(this.value))">
+            <option value="15" ${focusSettings.pomodoroLength === 15 ? 'selected' : ''}>15 min</option>
+            <option value="25" ${focusSettings.pomodoroLength === 25 ? 'selected' : ''}>25 min</option>
+            <option value="45" ${focusSettings.pomodoroLength === 45 ? 'selected' : ''}>45 min</option>
+            <option value="50" ${focusSettings.pomodoroLength === 50 ? 'selected' : ''}>50 min</option>
+          </select>
+        </div>
+        <div class="sr">
+          <div class="sri">
+            <div class="srl">Break Duration</div>
+            <div class="srd">Default short break length</div>
+          </div>
+          <select class="fsl" style="width:100px;font-size:11px;padding:5px" onchange="saveFocusSetting('breakLength', parseInt(this.value))">
+            <option value="3" ${focusSettings.breakLength === 3 ? 'selected' : ''}>3 min</option>
+            <option value="5" ${focusSettings.breakLength === 5 ? 'selected' : ''}>5 min</option>
+            <option value="10" ${focusSettings.breakLength === 10 ? 'selected' : ''}>10 min</option>
+          </select>
+        </div>
+        <div class="sr" style="margin-bottom:0">
+          <div class="sri">
+            <div class="srl">Focus Reminders</div>
+            <div class="srd">Alert when session triggers happen</div>
+          </div>
+          <div class="tgl ${focusSettings.focusNotifications ? 'on' : ''}" onclick="window.saveFocusSetting('focusNotifications', !S.focusSettings.focusNotifications)"></div>
+        </div>
+      </div>
+
+      <!-- HABIT STATUS ENGINE SETTINGS -->
+      <div class="card cp">
+        <div class="ct mb3">⚙️ Habit Engine Settings</div>
+        <div class="sr">
+          <div class="sri">
+            <div class="srl">Late Completion Rule</div>
+            <div class="srd">How late check-offs affect streaks</div>
+          </div>
+          <select class="fsl" style="width:130px;font-size:11px;padding:5px" onchange="saveHabitStatusSetting('lateStreakRule', this.value)">
+            <option value="maintain" ${habitSettings.lateStreakRule === 'maintain' ? 'selected' : ''}>Maintain Streak</option>
+            <option value="break" ${habitSettings.lateStreakRule === 'break' ? 'selected' : ''}>Break Streak</option>
+          </select>
+        </div>
+        <div class="sr">
+          <div class="sri">
+            <div class="srl">Auto-Close Time</div>
+            <div class="srd">When pending habits close to Missed</div>
+          </div>
+          <input type="time" class="time-picker-input" style="width:100px;font-size:11px" value="${habitSettings.autoCloseTime || '23:59'}" onchange="saveHabitStatusSetting('autoCloseTime', this.value)">
+        </div>
+        <div class="sr" style="margin-bottom:0">
+          <div class="sri">
+            <div class="srl">Habit Notifications</div>
+            <div class="srd">Streak risks and auto-close warnings</div>
+          </div>
+          <div class="tgl ${habitSettings.habitNotifications ? 'on' : ''}" onclick="window.saveHabitStatusSetting('habitNotifications', !S.habitStatusSettings.habitNotifications)"></div>
         </div>
       </div>
     </div>
@@ -1197,11 +1363,49 @@ function _installRealTimeSystem() {
   window.save = function() {
     originalSave();
     updateTodayStatusBar();
-    // Auto-refresh Dashboard if active view
-    if (curPage === 'dashboard' && typeof rDash === 'function') {
-      rDash();
-    }
+    if (curPage === 'dashboard' && typeof rDash === 'function') rDash();
+    if (curPage === 'focus' && typeof rFocus === 'function') rFocus();
+    if (curPage === 'matrix' && typeof rMatrix === 'function') rMatrix();
   };
+
+  // Expose focus/habit status settings saves
+  window.saveFocusSetting = function(key, val) {
+    focusEnsureData();
+    S.focusSettings[key] = val;
+    window.save();
+    if (typeof syncTimerSettings === 'function') syncTimerSettings();
+    toast('Focus setting saved', 'success');
+  };
+
+  window.saveHabitStatusSetting = function(key, val) {
+    focusEnsureData();
+    S.habitStatusSettings[key] = val;
+    window.save();
+    toast('Habit engine setting saved', 'success');
+  };
+
+  // 4. Expose Drawer actions globally
+  window.toggleNotificationCenter     = toggleNotificationCenter;
+  window.dismissNotification           = dismissNotification;
+  window.clearAllNotificationHistory   = clearAllNotificationHistory;
+  window.setNotiDrawerFilter           = setNotiDrawerFilter;
+  window.requestNotificationPermission = requestNotificationPermission;
+  window.togNotiSetting                = togNotiSetting;
+  window.saveNotiTimeSetting           = saveNotiTimeSetting;
+  window.saveNotiSoundSetting          = saveNotiSoundSetting;
+  window.playNotificationSound         = playNotificationSound;
+
+  // 5. Build settings view hook
+  const originalRSettings = window.rSettings;
+  if (originalRSettings) {
+    window.rSettings = function() {
+      originalRSettings();
+      renderNotificationSettings();
+    };
+  }
+
+  // Run Startup Retroactive sweep to close unlogged pending habits
+  runRetroactiveHabitSweep();
 
   // 2. Wrap switchAnalyticsTab()
   if (window.switchAnalyticsTab) {
@@ -1237,25 +1441,7 @@ function _installRealTimeSystem() {
     };
   }
 
-  // 4. Expose Drawer actions globally
-  window.toggleNotificationCenter     = toggleNotificationCenter;
-  window.dismissNotification           = dismissNotification;
-  window.clearAllNotificationHistory   = clearAllNotificationHistory;
-  window.setNotiDrawerFilter           = setNotiDrawerFilter;
-  window.requestNotificationPermission = requestNotificationPermission;
-  window.togNotiSetting                = togNotiSetting;
-  window.saveNotiTimeSetting           = saveNotiTimeSetting;
-  window.saveNotiSoundSetting          = saveNotiSoundSetting;
-  window.playNotificationSound         = playNotificationSound;
 
-  // 5. Build settings view hook
-  const originalRSettings = window.rSettings;
-  if (originalRSettings) {
-    window.rSettings = function() {
-      originalRSettings();
-      renderNotificationSettings();
-    };
-  }
 
   // 6. Listen for SW messages
   if ('serviceWorker' in navigator) {

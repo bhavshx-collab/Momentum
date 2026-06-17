@@ -40,6 +40,7 @@
 <link rel="stylesheet" href="/css/planner.css">
 <link rel="stylesheet" href="/css/versioning.css">
 <link rel="stylesheet" href="/css/realtime.css">
+<link rel="stylesheet" href="/css/focus.css">
 <style>
 :root{--bg:#050912;--bg2:#08101e;--card:rgba(5,10,23,0.75);--border:rgba(148,163,184,0.08);--purple:#8b5cf6;--plite:#a78bfa;--blue:#3b82f6;--green:#22c55e;--red:#ef4444;--amber:#f59e0b;--text:#f1f5f9;--t2:#94a3b8;--t3:#64748b;--sw:215px}
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
@@ -308,10 +309,11 @@ body{font-family:'Inter',sans-serif;background-color:#050912;background-image:ra
   <nav class="nav" id="nav">
     <div class="nav-sec">Main</div>
     <div class="ni active" data-p="dashboard" onclick="go('dashboard')"><span class="ico">🏠</span>Dashboard</div>
-    <div class="ni" data-p="matrix" onclick="go('matrix')"><span class="ico">📋</span>Habit Matrix</div>
-    <div class="ni" data-p="habits" onclick="go('habits')"><span class="ico">✅</span>Manage Habits</div>
+    <div class="ni" data-p="habits" onclick="go('habits')"><span class="ico">✅</span>Habits</div>
     <div class="ni" data-p="planner" onclick="go('planner')"><span class="ico">📅</span>Planner</div>
+    <div class="ni" data-p="focus" onclick="go('focus')"><span class="ico">🎯</span>Focus Hub</div>
     <div class="nav-sec">Insights</div>
+    <div class="ni" data-p="matrix" onclick="go('matrix')"><span class="ico">📋</span>Calendar</div>
     <div class="ni" data-p="analytics" onclick="go('analytics')"><span class="ico">📊</span>Analytics</div>
     <div class="ni" data-p="goals" onclick="go('goals')"><span class="ico">🎯</span>Goals</div>
     <div class="nav-sec">Personal</div>
@@ -357,6 +359,7 @@ body{font-family:'Inter',sans-serif;background-color:#050912;background-image:ra
     <!-- DASHBOARD -->
     <div id="page-dashboard" class="page active">
       <div class="sg" id="dash-stats"></div>
+      <div class="sg" id="dash-stats-focus" style="margin-top:-8px;margin-bottom:18px"></div>
       <div style="display:grid;grid-template-columns:1fr 1fr 240px;gap:14px">
         <!-- Today's Habits -->
         <div style="display:flex;flex-direction:column;gap:14px">
@@ -444,6 +447,7 @@ body{font-family:'Inter',sans-serif;background-color:#050912;background-image:ra
       </div>
       <!-- Habits panel -->
       <div id="analytics-panel-habits" class="analytics-tab-panel active">
+        <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:14px" id="habit-status-rates-grid"></div>
         <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:14px" id="insight-grid"></div>
         <div class="ag">
           <div class="card afc"><div class="ch"><span class="ct">📈 Completion Trend (12 Weeks)</span></div><div class="cp"><div class="cw"><canvas id="c-trend"></canvas></div></div></div>
@@ -601,11 +605,175 @@ body{font-family:'Inter',sans-serif;background-color:#050912;background-image:ra
       </div>
     </div>
 
+    <!-- FOCUS HUB -->
+    <div id="page-focus" class="page">
+      <!-- Focus Stats Row -->
+      <div class="sg mb4" id="focus-stats">
+        <!-- populated dynamically by focus.js -->
+      </div>
+
+      <!-- Focus Workspace -->
+      <div style="display:grid;grid-template-columns:1fr 320px;gap:14px;margin-bottom:18px">
+        <!-- Left Pane: Pomodoro Timer -->
+        <div class="card cp focus-timer-card" style="display:flex;flex-direction:column;align-items:center;padding:24px">
+          <div class="flex jb aic w100 mb4" style="border-bottom:1px solid var(--border);padding-bottom:12px">
+            <span class="ct" style="font-size:15px">⏱️ Pomodoro Session</span>
+            <div class="flex gap2" style="flex-wrap:wrap">
+              <button class="btn bg btn-sm mode-pill active" id="btn-mode-focus" onclick="setTimerMode('focus')">25m Focus</button>
+              <button class="btn bg btn-sm mode-pill" id="btn-mode-break" onclick="setTimerMode('break')">5m Break</button>
+              <button class="btn bg btn-sm mode-pill" id="btn-mode-longBreak" onclick="setTimerMode('longBreak')">15m Long</button>
+              <button class="btn bg btn-sm mode-pill" id="btn-mode-deepWork" onclick="setTimerMode('deepWork')">50m Deep</button>
+              <button class="btn bg btn-sm mode-pill" id="btn-mode-custom" onclick="openCustomTimerModal()">Custom</button>
+            </div>
+          </div>
+
+          <div class="focus-timer-display-container" style="margin:20px 0;position:relative;width:220px;height:220px">
+            <svg class="progress-ring" width="220" height="220" style="transform:rotate(-90deg)">
+              <circle class="progress-ring-circle-bg" stroke="rgba(148,163,184,0.05)" stroke-width="8" fill="transparent" r="96" cx="110" cy="110"/>
+              <circle class="progress-ring-circle" id="timer-progress-ring" stroke="var(--purple)" stroke-dasharray="603" stroke-dashoffset="0" stroke-width="8" stroke-linecap="round" fill="transparent" r="96" cx="110" cy="110" style="transition:stroke-dashoffset 0.3s"/>
+            </svg>
+            <div class="timer-text-overlay" style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);text-align:center;width:100%">
+              <div class="timer-time" id="focus-time-display" style="font-size:36px;font-weight:800;font-variant-numeric:tabular-nums;line-height:1">25:00</div>
+              <div class="timer-state-label" id="focus-state-label" style="font-size:10px;text-transform:uppercase;letter-spacing:0.08em;color:var(--t3);margin-top:6px;font-weight:700">Ready to Focus</div>
+            </div>
+          </div>
+
+          <div class="focus-timer-controls flex jc gap3 mb4">
+            <button class="btn bp" id="btn-timer-start" onclick="toggleTimer()" style="padding:10px 24px;font-size:13px">Start Focus</button>
+            <button class="btn bg" id="btn-timer-skip" onclick="skipTimerMode()" style="display:none">Skip Break</button>
+            <button class="btn bd" id="btn-timer-reset" onclick="resetTimer()">Reset</button>
+          </div>
+
+          <div class="focus-category-selector-container w100" style="border-top:1px solid var(--border);padding-top:16px">
+            <label class="fl">Session Category</label>
+            <div class="flex gap2" id="focus-cat-pills" style="flex-wrap:wrap">
+              <!-- Category pills will be rendered dynamically -->
+            </div>
+          </div>
+        </div>
+
+        <!-- Right Pane: Live Focus Analytics Summary & Streaks -->
+        <div style="display:flex;flex-direction:column;gap:14px">
+          <!-- Streaks Card -->
+          <div class="card cp">
+            <div class="ct mb3">🔥 Focus Streaks</div>
+            <div class="focus-streaks-container" id="focus-streaks-widget" style="display:flex;flex-direction:column;gap:10px">
+              <!-- populated dynamically -->
+            </div>
+          </div>
+
+          <!-- Quick Insights -->
+          <div class="card cp">
+            <div class="ct mb3">💡 Focus Insights</div>
+            <div class="focus-insights-list" id="focus-insights-widget" style="display:flex;flex-direction:column;gap:8px">
+              <!-- populated dynamically -->
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Focus Detailed Analytics (Heatmap & Breakdown) -->
+      <div class="ag mb4">
+        <!-- Category Breakdown -->
+        <div class="card">
+          <div class="ch"><span class="ct">🍩 Category Breakdown</span></div>
+          <div class="cp">
+            <div class="cw"><canvas id="c-focus-donut"></canvas></div>
+          </div>
+        </div>
+
+        <!-- Best Focus Time -->
+        <div class="card cp">
+          <div class="ct mb3">⚡ Productivity Patterns</div>
+          <div class="best-time-analysis" id="focus-best-time-widget" style="display:flex;flex-direction:column;gap:12px;padding:6px 0">
+            <!-- populated dynamically -->
+          </div>
+        </div>
+
+        <!-- Heatmap -->
+        <div class="card afc" style="grid-column: 1 / -1;">
+          <div class="ch"><span class="ct">🟩 Focus Heatmap (12 Weeks)</span><span class="txs tm">Daily focus hours completed</span></div>
+          <div class="cp">
+            <div style="display:flex;gap:8px;align-items:center;margin-bottom:12px;flex-wrap:wrap">
+              <div class="flex aic gap2"><div style="width:11px;height:11px;border-radius:2px;background:rgba(148,163,184,0.06);border:1px solid rgba(255,255,255,0.05)"></div><span class="txs tm">None</span></div>
+              <div class="flex aic gap2"><div style="width:11px;height:11px;border-radius:2px;background:rgba(239,68,68,0.4)"></div><span class="txs tm">Poor (< 1h)</span></div>
+              <div class="flex aic gap2"><div style="width:11px;height:11px;border-radius:2px;background:rgba(245,158,11,0.5)"></div><span class="txs tm">Average (1h - 2h)</span></div>
+              <div class="flex aic gap2"><div style="width:11px;height:11px;border-radius:2px;background:rgba(34,197,94,0.4)"></div><span class="txs tm">Good (2h - 4h)</span></div>
+              <div class="flex aic gap2"><div style="width:11px;height:11px;border-radius:2px;background:rgba(34,197,94,0.85)"></div><span class="txs tm">Excellent (4h+)</span></div>
+            </div>
+            <div class="prod-heatmap-grid" id="focus-heatmap"></div>
+          </div>
+        </div>
+
+        <!-- Session Logs -->
+        <div class="card afc" style="grid-column: 1 / -1;">
+          <div class="ch"><span class="ct">📚 Completed Focus Sessions</span></div>
+          <div class="cp" style="max-height: 250px; overflow-y: auto; padding: 0;">
+            <table class="mxt noti-table" style="min-width:100%">
+              <thead>
+                <tr style="border-bottom:1px solid var(--border)">
+                  <th style="padding:10px 16px;text-align:left">Session ID</th>
+                  <th style="padding:10px 16px;text-align:left">Date</th>
+                  <th style="padding:10px 16px;text-align:left">Category</th>
+                  <th style="padding:10px 16px;text-align:left">Duration</th>
+                  <th style="padding:10px 16px;text-align:left">Status</th>
+                </tr>
+              </thead>
+              <tbody id="focus-session-logs-tbody">
+                <!-- populated dynamically -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+
   </div>
 </main>
 </div>
 
 <!-- ===== STATIC MODALS ===== -->
+
+<!-- CUSTOM TIMER MODAL -->
+<div id="m-focus-custom" class="mo hid">
+  <div class="mb">
+    <div class="mh"><h3>⏱️ Set Custom Focus Goal</h3><button class="btn bg btn-ico" onclick="closeCustomTimerModal()">✕</button></div>
+    <div class="mbd">
+      <div class="fg">
+        <label class="fl">Focus Goal (Minutes)</label>
+        <input class="fi" type="number" id="custom-timer-duration" value="25" min="1" max="180">
+      </div>
+    </div>
+    <div class="mf"><button class="btn bg" onclick="closeCustomTimerModal()">Cancel</button><button class="btn bp" onclick="saveCustomTimer()">Set Timer</button></div>
+  </div>
+</div>
+
+<!-- AUDIT REASON MODAL -->
+<div id="m-audit" class="mo hid">
+  <div class="mb">
+    <div class="mh"><h3>📋 Log Audit Reason</h3><button class="btn bg btn-ico" onclick="closeAuditModal()">✕</button></div>
+    <div class="mbd">
+      <input type="hidden" id="audit-hid">
+      <input type="hidden" id="audit-ds">
+      <input type="hidden" id="audit-val">
+      <p class="t2 mb3">You are editing a completion record from more than 24 hours ago. Please provide a reason for this change:</p>
+      <div class="fg">
+        <label class="fl">Reason *</label>
+        <select class="fsl" id="audit-reason">
+          <option value="Forgot To Log">Forgot To Log</option>
+          <option value="Completed Late">Completed Late</option>
+          <option value="Data Correction">Data Correction</option>
+          <option value="Other">Other</option>
+        </select>
+      </div>
+      <div class="fg">
+        <label class="fl">Comment (optional)</label>
+        <input class="fi" id="audit-comment" placeholder="Add additional context...">
+      </div>
+    </div>
+    <div class="mf"><button class="btn bg" onclick="closeAuditModal()">Cancel</button><button class="btn bp" onclick="saveAuditChange()">Confirm Change</button></div>
+  </div>
+</div>
 
 <!-- HABIT MODAL -->
 <div id="m-habit" class="mo hid">
@@ -803,6 +971,12 @@ function load(){
       if(!S.reflections)S.reflections={};
       // Migrate: add completionMeta if not present
       if(!S.completionMeta)S.completionMeta={};
+      // Migrate: Focus & Habit engine
+      if(!S.focusSettings) S.focusSettings = { focusGoal: 4, pomodoroLength: 25, breakLength: 5, longBreakLength: 15, deepWorkLength: 50, focusNotifications: true };
+      if(!S.focusSessions) S.focusSessions = [];
+      if(!S.focusStreak) S.focusStreak = { currentStreak: 0, longestStreak: 0, lastFocusedDate: '' };
+      if(!S.habitStatusSettings) S.habitStatusSettings = { lateStreakRule: 'maintain', autoCloseTime: '23:59', backfillWindow: 24, habitNotifications: true };
+      if(!S.auditLog) S.auditLog = [];
 
       // Clear demo data on first load after this change
       if(!S.demoPurged){
@@ -830,6 +1004,11 @@ function seedDefaults(){
   S.missReasons={};
   S.tasks=[];
   S.reflections={};
+  S.focusSettings = { focusGoal: 4, pomodoroLength: 25, breakLength: 5, longBreakLength: 15, deepWorkLength: 50, focusNotifications: true };
+  S.focusSessions = [];
+  S.focusStreak = { currentStreak: 0, longestStreak: 0, lastFocusedDate: '' };
+  S.habitStatusSettings = { lateStreakRule: 'maintain', autoCloseTime: '23:59', backfillWindow: 24, habitNotifications: true };
+  S.auditLog = [];
   S.demoPurged=true;
   save();
 }
@@ -848,9 +1027,24 @@ function cycleC(hid,ds){const c=gc(hid,ds);const n=c===''?'dn':c==='dn'?'pt':c==
 function hStats(hid){
   const now=new Date();now.setHours(0,0,0,0);
   let streak=0,best=0,tmp=0,done=0,total=0;
-  for(let i=60;i>=0;i--){const d=new Date(now);d.setDate(d.getDate()-i);const s=gc(hid,fd(d));if(s==='dn'){tmp++;done++;best=Math.max(best,tmp);}else if(s){tmp=0;}if(s)total++;}
+  const rule = (S.habitStatusSettings && S.habitStatusSettings.lateStreakRule) || 'maintain';
+  for(let i=60;i>=0;i--){
+    const d=new Date(now);d.setDate(d.getDate()-i);
+    const s=gc(hid,fd(d));
+    const isCompleted = s==='dn' || s==='dn_late';
+    if(isCompleted){tmp++;done++;best=Math.max(best,tmp);}
+    else if(s){tmp=0;}
+    if(s)total++;
+  }
   streak=0;
-  for(let i=0;i<=60;i++){const d=new Date(now);d.setDate(d.getDate()-i);const s=gc(hid,fd(d));if(s==='dn')streak++;else if(s==='ms')break;else if(i>0)break;}
+  for(let i=0;i<=60;i++){
+    const d=new Date(now);d.setDate(d.getDate()-i);
+    const s=gc(hid,fd(d));
+    const isCompleted = s==='dn' || (s==='dn_late' && rule==='maintain');
+    if(isCompleted)streak++;
+    else if(s==='ms' || s==='dn_late')break;
+    else if(i>0)break;
+  }
   return{streak,best,done,total,rate:total>0?Math.round((done/total)*100):0};
 }
 
@@ -875,14 +1069,14 @@ function overallStats(){
 function go(page){
   curPage=page;
   document.querySelectorAll('.ni').forEach(el=>el.classList.toggle('active',el.dataset.p===page));
-  const titles={dashboard:'Dashboard',matrix:'Habit Matrix',habits:'Manage Habits',planner:'Planner',analytics:'Analytics',goals:'Goals',journal:'Journal',settings:'Settings'};
-  const subs={dashboard:'Your personal growth command center',matrix:'Spreadsheet-style habit tracker — click cells to toggle',habits:'Add, edit and organise your habits',planner:'Daily tasks, productivity scores & reflections',analytics:'Deep insights into your habits and tasks',goals:'Long-term goals with milestones',journal:'Daily reflections and mood tracking',settings:'Customise your Momentum experience'};
+  const titles={dashboard:'Dashboard',matrix:'Calendar',habits:'Manage Habits',planner:'Planner',focus:'Focus Hub',analytics:'Analytics',goals:'Goals',journal:'Journal',settings:'Settings'};
+  const subs={dashboard:'Your personal growth command center',matrix:'Spreadsheet-style habit tracker — click cells to toggle',habits:'Add, edit and organise your habits',planner:'Daily tasks, productivity scores & reflections',focus:'🎯 Deep work, Pomodoros, and focus analytics',analytics:'Deep insights into your habits and tasks',goals:'Long-term goals with milestones',journal:'Daily reflections and mood tracking',settings:'Customise your Momentum experience'};
   document.getElementById('tb-title').textContent=titles[page]||page;
   document.getElementById('tb-sub').textContent=subs[page]||'';
   document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
   const el=document.getElementById('page-'+page);if(el)el.classList.add('active');
-  if(page!=='analytics')destroyCharts();
-  const fns={dashboard:rDash,matrix:rMatrix,habits:()=>renderHabits('all'),planner:()=>PlannerPage.render(),analytics:rAnalytics,goals:rGoals,journal:rJournal,settings:rSettings};
+  if(page!=='analytics' && page!=='focus')destroyCharts();
+  const fns={dashboard:rDash,matrix:rMatrix,habits:()=>renderHabits('all'),planner:()=>PlannerPage.render(),focus:()=>typeof rFocus==='function'&&rFocus(),analytics:rAnalytics,goals:rGoals,journal:rJournal,settings:rSettings};
   if(fns[page])fns[page]();
   document.querySelector('.content').scrollTo(0,0);
 }
@@ -894,24 +1088,96 @@ function rDash(){
   document.getElementById('tb-title').textContent=`${gr}, ${S.user.name} 👋`;
   document.getElementById('tb-sub').textContent=now.toLocaleDateString('en-IN',{weekday:'long',year:'numeric',month:'long',day:'numeric'});
   document.getElementById('tb-date').textContent='📅 '+now.toLocaleDateString('en-IN',{month:'short',day:'numeric'});
+  
+  // Render main habit stats
   document.getElementById('dash-stats').innerHTML=`
     <div class="card sc cp"><div class="si">🔥</div><div class="sv">${stats.streak}</div><div class="sl">Current Streak</div><div class="ss">days</div></div>
     <div class="card sc sc-b"><div class="si">🏆</div><div class="sv">${stats.longestStreak}</div><div class="sl">Longest Streak</div><div class="ss">personal best</div></div>
     <div class="card sc cg"><div class="si">📈</div><div class="sv">${stats.successRate}%</div><div class="sl">Success Rate</div><div class="ss">last 30 days</div></div>
     <div class="card sc ca"><div class="si">✅</div><div class="sv">${stats.doneToday}<span style="font-size:16px;font-weight:500;color:var(--t2)">/${stats.total}</span></div><div class="sl">Done Today</div><div class="ss">${stats.total>0?Math.round((stats.doneToday/stats.total)*100):0}% complete</div></div>`;
+  
+  // Calculate focus stats for today
+  focusEnsureData();
+  const todaySessions = S.focusSessions.filter(s => s.date === t);
+  const totalMins = todaySessions.reduce((sum, s) => sum + s.duration, 0);
+  const goalHours = S.focusSettings.focusGoal;
+  const goalMins = goalHours * 60;
+  const progressPct = goalMins > 0 ? Math.min(100, Math.round((totalMins / goalMins) * 100)) : 0;
+  const dispHrs = Math.floor(totalMins / 60);
+  const dispMins = totalMins % 60;
+  const focusTimeStr = dispHrs > 0 ? `${dispHrs}h ${dispMins}m` : `${dispMins}m`;
+  const pomodorosToday = window.FocusTimerState ? window.FocusTimerState.pomodorosCompletedToday : todaySessions.length;
+
+  // Calculate habit engine stats for today (Pending & Missed count)
+  let pendingHabits = 0;
+  let missedHabits = 0;
+  S.habits.forEach(hb => {
+    const s = gc(hb.id, t);
+    if (s === '' || s === undefined) pendingHabits++;
+    else if (s === 'ms') missedHabits++;
+  });
+
+  // Render secondary focus/habit status stats cards
+  const focusStreak = S.focusStreak ? S.focusStreak.currentStreak : 0;
+  document.getElementById('dash-stats-focus').innerHTML = `
+    <div class="card sc cp" style="border-top-color:var(--purple);"><div class="si">⏱️</div><div class="sv">${focusTimeStr}<span style="font-size:11px;font-weight:500;color:var(--t2)"> / ${goalHours}h Goal</span></div><div class="sl">Focus Time</div><div class="ss">${progressPct}% of daily focus goal</div></div>
+    <div class="card sc sc-b" style="border-top-color:var(--blue);"><div class="si">🍅</div><div class="sv">${pomodorosToday}</div><div class="sl">Pomodoros Today</div><div class="ss">sessions completed</div></div>
+    <div class="card sc cg" style="border-top-color:var(--green);"><div class="si">⏳</div><div class="sv">${pendingHabits}</div><div class="sl">Pending Habits</div><div class="ss">waiting to be done</div></div>
+    <div class="card sc ca" style="border-top-color:var(--red);"><div class="si">⚠️</div><div class="sv">${missedHabits}</div><div class="sl">Missed Habits</div><div class="ss">missed today</div></div>
+  `;
+
   document.getElementById('today-badge').textContent=`${stats.doneToday}/${stats.total} Done`;
+  
   // Render Today's Tasks widget
   rTodayTasks();
+  
+  // Render backfill reminder if yesterday has unlogged habits
+  let backfillHtml = '';
+  const yesterday = new Date();
+  yesterday.setDate(yesterday.getDate() - 1);
+  const yesterdayStr = fd(yesterday);
+  const yesterdayMissed = S.habits.filter(hb => gc(hb.id, yesterdayStr) === 'ms' || gc(hb.id, yesterdayStr) === '' || gc(hb.id, yesterdayStr) === undefined);
+  
   const list=document.getElementById('today-list');
-  if(!S.habits.length){list.innerHTML=`<div class="es" style="padding:28px"><div class="ei">✨</div><p class="t2">No habits yet.</p><button class="btn bp mt3" onclick="openHabitModal()">+ Add Habit</button></div>`;return;}
-  list.innerHTML=S.habits.map(h=>{
-    const s=gc(h.id,t),done=s==='dn',hs=hStats(h.id);
+  
+  // Render yesterday's backfill window items if any
+  if (yesterdayMissed.length > 0) {
+    backfillHtml = `
+      <div style="padding:10px 16px;background:rgba(245,158,11,0.06);border-bottom:1px solid var(--border);border-left:4px solid var(--amber)">
+        <div style="font-size:11px;font-weight:700;color:var(--amber);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:6px">📅 Backfill Window Open (Yesterday's Missed Habits)</div>
+        <div style="display:flex;flex-direction:column;gap:6px">
+          ${yesterdayMissed.map(h => `
+            <div class="flex aic jb" style="padding:4px 0">
+              <span class="tsm text-secondary">${h.icon} ${h.name}</span>
+              <button class="btn bp btn-sm" onclick="markYesterdayComplete('${h.id}')" style="padding:3px 8px;font-size:10px">Mark Completed Late</button>
+            </div>
+          `).join('')}
+        </div>
+      </div>
+    `;
+  }
+
+  if(!S.habits.length){
+    list.innerHTML=`<div class="es" style="padding:28px"><div class="ei">✨</div><p class="t2">No habits yet.</p><button class="btn bp mt3" onclick="openHabitModal()">+ Add Habit</button></div>`;
+    return;
+  }
+  
+  list.innerHTML = backfillHtml + S.habits.map(h=>{
+    const s=gc(h.id,t),done=s==='dn'||s==='dn_late',hs=hStats(h.id);
+    let statusLabel = 'Pending';
+    let badgeClass = 'badge bp2';
+    if (s === 'dn') { statusLabel = 'Done'; badgeClass = 'badge bg2'; }
+    else if (s === 'dn_late') { statusLabel = 'Done Late'; badgeClass = 'badge bg2'; }
+    else if (s === 'ms') { statusLabel = 'Missed'; badgeClass = 'badge br'; }
+    else if (s === 'pt') { statusLabel = 'Partial'; badgeClass = 'badge ba'; }
+    
     return`<div class="hcr ${done?'done':''}" id="tcr-${h.id}" onclick="togToday('${h.id}')">
       <div class="cb ${done?'done':''}" id="tcb-${h.id}">${done?'✓':''}</div>
       <div style="flex:1;min-width:0"><div class="hn">${h.icon} ${h.name}</div><div class="hm"><span class="badge ${CAT_C[h.category]||'bp2'}">${h.category}</span><span class="hst">🔥 ${hs.streak}d</span></div></div>
-      <span class="badge ${done?'bg2':'bp2'}" id="tbadge-${h.id}">${done?'Done':'Pending'}</span>
+      <span class="${badgeClass}" id="tbadge-${h.id}">${statusLabel}</span>
     </div>`;
   }).join('');
+  
   const leaders=[...S.habits].map(h=>({h,s:hStats(h.id)})).sort((a,b)=>b.s.streak-a.s.streak).slice(0,4);
   if(leaders.length===0){
     document.getElementById('streak-leaders').innerHTML='<div class="txs tm" style="padding:10px 0">No active streaks yet.</div>';
@@ -919,6 +1185,28 @@ function rDash(){
     document.getElementById('streak-leaders').innerHTML=leaders.map(({h,s})=>`<div class="flex aic gap2 mb3"><span style="font-size:14px">${h.icon}</span><div style="flex:1"><div style="font-size:11px;font-weight:600">${h.name}</div><div style="height:3px;background:rgba(148,163,184,.1);border-radius:2px;margin-top:3px"><div style="height:100%;width:${Math.min(100,(s.streak/40)*100)}%;background:linear-gradient(90deg,#8b5cf6,#6366f1);border-radius:2px"></div></div></div><span style="font-size:11px;font-weight:700;color:var(--amber)">${s.streak}🔥</span></div>`).join('');
   }
 }
+
+// Global action for dashboard backfill button
+window.markYesterdayComplete = function(hid) {
+  const yesterday = new Date();
+  yesterday.setDate(yesterday.getDate() - 1);
+  const ds = fd(yesterday);
+  sc(hid, ds, 'dn_late');
+  // Record snapshot details
+  if (typeof recordCompletionSnapshot === 'function') {
+    recordCompletionSnapshot(hid, ds);
+  }
+  // Record audit meta in completionMeta
+  if (S.completionMeta) {
+    S.completionMeta[hid + '_' + ds] = S.completionMeta[hid + '_' + ds] || {};
+    S.completionMeta[hid + '_' + ds].status = 'completed_late';
+    S.completionMeta[hid + '_' + ds].actualDate = ds;
+    S.completionMeta[hid + '_' + ds].loggedDate = fd(new Date());
+  }
+  save();
+  rDash();
+  toast('Yesterday\'s habit marked as Completed Late!', 'success');
+};
 
 function togToday(hid){
   const t=ts(),cur=gc(hid,t),next=cur==='dn'?'':  'dn';
@@ -1089,8 +1377,61 @@ function destroyCharts(){Object.values(charts).forEach(c=>{try{c.destroy();}catc
 function tooltipCfg(){return{backgroundColor:'#1a2440',borderColor:'rgba(139,92,246,.25)',borderWidth:1,titleColor:'#f1f5f9',bodyColor:'#94a3b8',padding:10,cornerRadius:8,titleFont:{family:'Inter',size:11},bodyFont:{family:'Inter',size:10}};}
 
 function rAnalytics(){
+  rHabitStatusRates();
   rInsights();rRanking();rMissedDays();rMissReasons();
   requestAnimationFrame(()=>{rTrend();rDonut();rWeekly();});
+}
+
+function calculateHabitStatusRates() {
+  const h = S.habits;
+  const now = new Date(); now.setHours(0,0,0,0);
+  let completedCount = 0;
+  let completedLateCount = 0;
+  let missedCount = 0;
+  let pendingCount = 0;
+  let totalSlots = 0;
+
+  // Analyze the last 30 days
+  for (let i = 0; i < 30; i++) {
+    const d = new Date(now);
+    d.setDate(d.getDate() - i);
+    const ds = fd(d);
+    
+    h.forEach(hb => {
+      // If habit was created after ds, skip
+      if (hb.createdAt && hb.createdAt > ds) return;
+      
+      totalSlots++;
+      const s = gc(hb.id, ds);
+      if (s === 'dn') completedCount++;
+      else if (s === 'dn_late') completedLateCount++;
+      else if (s === 'ms') missedCount++;
+      else pendingCount++;
+    });
+  }
+
+  const completedRate = totalSlots > 0 ? Math.round((completedCount / totalSlots) * 100) : 0;
+  const lateRate = totalSlots > 0 ? Math.round((completedLateCount / totalSlots) * 100) : 0;
+  const missedRate = totalSlots > 0 ? Math.round((missedCount / totalSlots) * 100) : 0;
+  const pendingRate = totalSlots > 0 ? Math.round((pendingCount / totalSlots) * 100) : 0;
+  
+  const totalCompletions = completedCount + completedLateCount;
+  const loggingAccuracy = totalCompletions > 0 ? Math.round((completedCount / totalCompletions) * 100) : 100;
+
+  return { completedRate, lateRate, missedRate, pendingRate, loggingAccuracy, completedCount, completedLateCount, missedCount, pendingCount };
+}
+
+function rHabitStatusRates(){
+  const rates = calculateHabitStatusRates();
+  const el = document.getElementById('habit-status-rates-grid');
+  if(!el) return;
+  
+  el.innerHTML = `
+    <div class="card sc cp" style="border-top-color:var(--purple);"><div class="si">✅</div><div class="sv">${rates.completedRate}%</div><div class="sl">True Completion</div><div class="ss">${rates.completedCount} slots logged</div></div>
+    <div class="card sc sc-b" style="border-top-color:var(--blue);"><div class="si">🕒</div><div class="sv">${rates.lateRate}%</div><div class="sl">Late Completion</div><div class="ss">${rates.completedLateCount} logged late</div></div>
+    <div class="card sc ca" style="border-top-color:var(--amber);"><div class="si">❌</div><div class="sv">${rates.missedRate}%</div><div class="sl">Missed Rate</div><div class="ss">${rates.missedCount} slots missed</div></div>
+    <div class="card sc cg" style="border-top-color:var(--green);"><div class="si">🎯</div><div class="sv">${rates.loggingAccuracy}%</div><div class="sl">Logging Accuracy</div><div class="ss">logged on time</div></div>
+  `;
 }
 
 function rInsights(){
@@ -1280,6 +1621,9 @@ go('dashboard');
 
 <!-- ── Realtime Module ───────────────────────────────────────────────── -->
 <script src="/js/realtime.js"></script>
+
+<!-- ── Focus Hub Module ──────────────────────────────────────────────── -->
+<script src="/js/focus.js"></script>
 
 <!-- ── PWA Update Notification ──────────────────────────────────────────── -->
 <div id="pwa-update-bar" style="
