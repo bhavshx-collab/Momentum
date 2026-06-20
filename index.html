@@ -1607,6 +1607,7 @@ function toast(msg,type='info'){const ico={success:'✅',error:'❌',info:'ℹ�
 // ── MODAL CLOSE ON BACKDROP ──
 document.querySelectorAll('.mo').forEach(mo=>{mo.addEventListener('click',function(e){if(e.target===this){if(this.id==='m-habit')closeHM();else if(this.id==='m-goal')closeGM();else if(this.id==='m-miss')closeMM();else if(this.id==='m-confirm')closeConf();else if(this.id==='m-task')closeTaskModal();}});});
 document.addEventListener('keydown',e=>{if(e.key==='Escape'){closeHM();closeGM();closeMM();closeConf();if(typeof closeTaskModal!=='undefined')closeTaskModal();if(typeof closeHabitDetail!=='undefined')closeHabitDetail();}});
+</script>
 
 <!-- ── Planner Module ──────────────────────────────────────────────────── -->
 <script src="/js/planner.js"></script>
