@@ -1,6 +1,6 @@
 // Momentum Habit Tracker — Service Worker
 // Version bump here to force cache refresh on redeploy
-const CACHE_VERSION = 'v1.4.0';
+const CACHE_VERSION = 'v1.5.0';
 const CACHE_NAME = `momentum-${CACHE_VERSION}`;
 const OFFLINE_URL = '/';
 
