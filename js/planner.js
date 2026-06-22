@@ -933,6 +933,8 @@ function switchAnalyticsTab(tab) {
   );
   if (tab === 'tasks') {
     rTaskAnalytics();
+  } else if (tab === 'balance') {
+    if (typeof rLifeWheel === 'function') rLifeWheel();
   }
 }
 

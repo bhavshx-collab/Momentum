@@ -4,16 +4,20 @@
  * Exposes the global FocusTimer system and hooks into the Momentum state structure.
  */
 
-// ── CONSTANTS & CATEGORIES ──
-const FOCUS_CATEGORIES = [
-  '📚 AIML',
-  '💻 DSA',
-  '🌐 Web Development',
-  '🏋️ Fitness Learning',
-  '📖 Reading',
-  '🎯 Personal Growth',
-  '📝 College Work'
-];
+function getFocusCategories() {
+  if (typeof S !== 'undefined' && S.lifeAreas && S.lifeAreas.length > 0) {
+    return S.lifeAreas.filter(a => !a.archived).sort((a,b) => a.order - b.order).map(a => `${a.icon} ${a.name}`);
+  }
+  return [
+    '📚 AIML',
+    '💻 DSA',
+    '🌐 Web Development',
+    '🏋️ Fitness Learning',
+    '📖 Reading',
+    '🎯 Personal Growth',
+    '📝 College Work'
+  ];
+}
 
 const MODE_DURATIONS = {
   focus: 25 * 60,
@@ -28,7 +32,7 @@ window.FocusTimerState = {
   totalDuration: 25 * 60,
   isPlaying: false,
   mode: 'focus', // 'focus' | 'break' | 'longBreak' | 'deepWork' | 'custom'
-  category: FOCUS_CATEGORIES[0],
+  category: '',
   intervalId: null,
   pomodorosCompletedToday: 0
 };
@@ -150,7 +154,7 @@ function updateCategoryPills() {
   const container = document.getElementById('focus-cat-pills');
   if (!container) return;
   
-  container.innerHTML = FOCUS_CATEGORIES.map(cat => {
+  container.innerHTML = getFocusCategories().map(cat => {
     const isSelected = window.FocusTimerState.category === cat;
     return `<button class="category-pill ${isSelected ? 'selected' : ''}" onclick="selectCategory('${cat}')">${cat}</button>`;
   }).join('');
@@ -419,6 +423,10 @@ function recalculateFocusStreaks(todayDateStr) {
 function rFocus() {
   focusEnsureData();
   syncTimerSettings();
+  
+  if (!window.FocusTimerState.category || !getFocusCategories().includes(window.FocusTimerState.category)) {
+    window.FocusTimerState.category = getFocusCategories()[0] || '';
+  }
   
   // 1. Update Timer View elements
   updateTimerUI();
@@ -890,7 +898,7 @@ function renderFocusCategoryChart() {
   }
 
   const catMins = {};
-  FOCUS_CATEGORIES.forEach(cat => catMins[cat] = 0);
+  getFocusCategories().forEach(cat => catMins[cat] = 0);
   S.focusSessions.forEach(s => {
     catMins[s.category] = (catMins[s.category] || 0) + s.duration;
   });

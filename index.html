@@ -452,6 +452,7 @@ body{font-family:'Inter',sans-serif;background-color:#050912;background-image:ra
         <button class="analytics-tab-btn active" data-tab="habits" onclick="switchAnalyticsTab('habits')">🏃 Habits</button>
         <button class="analytics-tab-btn" data-tab="tasks" onclick="switchAnalyticsTab('tasks')">✅ Tasks</button>
         <button class="analytics-tab-btn" data-tab="notifications" onclick="switchAnalyticsTab('notifications')">🔔 Notifications</button>
+        <button class="analytics-tab-btn" data-tab="balance" onclick="switchAnalyticsTab('balance')">🌱 Life Balance</button>
       </div>
       <!-- Habits panel -->
       <div id="analytics-panel-habits" class="analytics-tab-panel active">
@@ -508,6 +509,15 @@ body{font-family:'Inter',sans-serif;background-color:#050912;background-image:ra
       </div>
       <!-- Notifications panel -->
       <div id="analytics-panel-notifications" class="analytics-tab-panel"></div>
+      <!-- Life Balance panel -->
+      <div id="analytics-panel-balance" class="analytics-tab-panel">
+        <div class="card" style="max-width: 600px; margin: 0 auto;">
+          <div class="ch"><span class="ct">🌱 Life Wheel Balance</span></div>
+          <div class="cp" style="height: 380px; position: relative; padding: 20px;">
+            <canvas id="c-life-wheel"></canvas>
+          </div>
+        </div>
+      </div>
     </div>
 
     <!-- GOALS -->
@@ -567,6 +577,21 @@ body{font-family:'Inter',sans-serif;background-color:#050912;background-image:ra
           <div class="ct mb3">💾 Data</div>
           <div class="sr"><div class="sri"><div class="srl">Export Data</div><div class="srd">Download JSON backup</div></div><button class="btn bs btn-sm" onclick="exportData()">📥 Export</button></div>
           <div class="sr" style="border-color:rgba(239,68,68,.2)"><div class="sri"><div class="srl tr">Reset All Data</div><div class="srd">⚠️ Deletes everything</div></div><button class="btn bd btn-sm" onclick="resetData()">Reset</button></div>
+        </div>
+        <div class="card cp">
+          <div class="ct mb3">🔥 Habit Engine &amp; Streaks</div>
+          <div class="fg">
+            <label class="fl">Late Streak Rule</label>
+            <select class="fsl" id="s-streak-rule" onchange="saveStreakSetting('lateStreakRule', this.value)">
+              <option value="maintain">Maintain Streak on Late Completion</option>
+              <option value="break">Break Streak on Late Completion</option>
+            </select>
+          </div>
+          <div class="fg mt3">
+            <label class="fl">Auto Close Day Time</label>
+            <input class="fi" type="time" id="s-close-time" onchange="saveStreakSetting('autoCloseTime', this.value)">
+          </div>
+          <p class="txs tm mt3">Day closes automatically at this time. All incomplete habits become 'Missed' for that day.</p>
         </div>
         <div class="card cp" style="grid-column:1/-1;text-align:center;padding:28px">
           <div style="font-size:44px;margin-bottom:10px">⚡</div>
@@ -1854,7 +1879,21 @@ function rSettings(){
   document.getElementById('s-uname').textContent=S.user.name;document.getElementById('s-email2').textContent=S.user.email;
   document.getElementById('av').textContent=S.user.name.charAt(0).toUpperCase();
   document.getElementById('uname').textContent=S.user.name+' Kumar';
+
+  // Load Habit Engine settings
+  const rules = S.habitStatusSettings || { lateStreakRule: 'maintain', autoCloseTime: '23:59' };
+  const rSelect = document.getElementById('s-streak-rule');
+  const tInput = document.getElementById('s-close-time');
+  if (rSelect) rSelect.value = rules.lateStreakRule || 'maintain';
+  if (tInput) tInput.value = rules.autoCloseTime || '23:59';
 }
+function saveStreakSetting(key, val) {
+  if (!S.habitStatusSettings) S.habitStatusSettings = {};
+  S.habitStatusSettings[key] = val;
+  save();
+  toast('✅ Setting saved!', 'success');
+}
+window.saveStreakSetting = saveStreakSetting;
 function saveProfile(){const n=document.getElementById('s-name').value.trim();if(!n){toast('Name required','error');return;}S.user.name=n;S.user.email=document.getElementById('s-email').value.trim();save();rSettings();toast('✅ Profile saved!','success');}
 function togSet(k,el){S.settings[k]=!S.settings[k];el.classList.toggle('on',S.settings[k]);save();toast(`Setting ${S.settings[k]?'enabled':'disabled'}`,'info');}
 function exportData(){const b=new Blob([JSON.stringify(S,null,2)],{type:'application/json'});const a=document.createElement('a');a.href=URL.createObjectURL(b);a.download=`momentum-${ts()}.json`;a.click();toast('📥 Exported!','success');}
