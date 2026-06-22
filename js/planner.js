@@ -398,11 +398,19 @@ function openTaskModal(prefillDate, editId) {
   plannerEnsureData();
   const task = editId ? S.tasks.find(t => t.id === editId) : null;
 
+  // Populate category options dynamically
+  if (typeof getLifeAreaCategories === 'function') {
+    const tCat = document.getElementById('t-cat');
+    if (tCat) {
+      tCat.innerHTML = getLifeAreaCategories().map(c => `<option>${c}</option>`).join('');
+    }
+  }
+
   document.getElementById('tm-title').textContent = task ? '✏️ Edit Task' : '✨ Add Task';
   document.getElementById('t-eid').value = editId || '';
   document.getElementById('t-name').value = task ? task.title : '';
   document.getElementById('t-desc').value = task ? (task.description || '') : '';
-  document.getElementById('t-cat').value  = task ? task.category  : 'Study';
+  document.getElementById('t-cat').value  = task ? task.category  : (typeof getLifeAreaCategories === 'function' ? (getLifeAreaCategories()[0] || 'Study') : 'Study');
   document.getElementById('t-date').value = task ? task.dueDate   : planTaskModal_prefillDate;
   document.getElementById('t-time').value = task ? (task.dueTime || '') : '';
   document.getElementById('t-rem-date').value = task ? (task.reminderDate || '') : '';

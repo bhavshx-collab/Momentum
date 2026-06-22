@@ -41,6 +41,7 @@
 <link rel="stylesheet" href="/css/versioning.css">
 <link rel="stylesheet" href="/css/realtime.css">
 <link rel="stylesheet" href="/css/focus.css">
+<link rel="stylesheet" href="/css/evolution.css">
 <style>
 :root{--bg:#050912;--bg2:#08101e;--card:rgba(5,10,23,0.75);--border:rgba(148,163,184,0.08);--purple:#8b5cf6;--plite:#a78bfa;--blue:#3b82f6;--green:#22c55e;--red:#ef4444;--amber:#f59e0b;--text:#f1f5f9;--t2:#94a3b8;--t3:#64748b;--sw:215px}
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
@@ -313,12 +314,17 @@ body{font-family:'Inter',sans-serif;background-color:#050912;background-image:ra
     <div class="ni" data-p="habits" onclick="go('habits')"><span class="ico">✅</span>Habits</div>
     <div class="ni" data-p="planner" onclick="go('planner')"><span class="ico">📅</span>Planner</div>
     <div class="ni" data-p="focus" onclick="go('focus')"><span class="ico">🎯</span>Focus Hub</div>
+    <div class="ni" data-p="knowledge" onclick="go('knowledge')"><span class="ico">💡</span>Knowledge</div>
+    <div class="ni" data-p="challenges" onclick="go('challenges')"><span class="ico">🏆</span>Challenges</div>
     <div class="nav-sec">Insights</div>
     <div class="ni" data-p="matrix" onclick="go('matrix')"><span class="ico">📋</span>Calendar</div>
     <div class="ni" data-p="analytics" onclick="go('analytics')"><span class="ico">📊</span>Analytics</div>
     <div class="ni" data-p="goals" onclick="go('goals')"><span class="ico">🎯</span>Goals</div>
+    <div class="ni" data-p="lifeareas" onclick="go('lifeareas')"><span class="ico">🌱</span>Life Areas</div>
+    <div class="ni" data-p="reviews" onclick="go('reviews')"><span class="ico">📈</span>Reviews</div>
     <div class="nav-sec">Personal</div>
     <div class="ni" data-p="journal" onclick="go('journal')"><span class="ico">📝</span>Journal</div>
+    <div class="ni" data-p="timeline" onclick="go('timeline')"><span class="ico">🌍</span>Timeline</div>
     <div class="ni" data-p="settings" onclick="go('settings')"><span class="ico">⚙️</span>Settings</div>
   </nav>
   <div class="sb-foot">
@@ -384,6 +390,7 @@ body{font-family:'Inter',sans-serif;background-color:#050912;background-image:ra
         </div>
         <!-- Quick Actions + Streak Leaders -->
         <div style="display:flex;flex-direction:column;gap:14px">
+          <div id="dash-score-widget"></div>
           <div class="card cp">
             <div class="ct mb3">⚡ Quick Actions</div>
             <div style="display:flex;flex-direction:column;gap:8px">
@@ -729,6 +736,73 @@ body{font-family:'Inter',sans-serif;background-color:#050912;background-image:ra
       </div>
     </div>
 
+    <!-- LIFE AREAS -->
+    <div id="page-lifeareas" class="page">
+      <div class="mb4"><div class="stit">🌱 Custom Life Areas</div><div class="ssub">Organize and balance your custom dimensions of life</div></div>
+      <div style="display:grid;grid-template-columns:1fr 340px;gap:18px">
+        <div style="display:flex;flex-direction:column;gap:14px">
+          <div class="flex jb aic">
+            <h4 class="ct" style="font-size:15px">Active Life Areas</h4>
+            <button class="btn bp btn-sm" onclick="openLifeAreaModal()">+ Add Life Area</button>
+          </div>
+          <div id="lifeareas-list" style="display:flex;flex-direction:column;gap:10px"></div>
+          
+          <h4 class="ct mt4" style="font-size:15px">Archived Life Areas</h4>
+          <div id="lifeareas-archived-list" style="display:flex;flex-direction:column;gap:10px"></div>
+        </div>
+        
+        <div class="card cp" style="display:flex;flex-direction:column;align-items:center;padding:20px;height:fit-content">
+          <div class="ch w100"><span class="ct">🌱 Life Wheel Balance</span></div>
+          <div style="width:100%;height:260px;position:relative;margin-top:14px">
+            <canvas id="c-life-wheel"></canvas>
+          </div>
+          <p class="txs tm mt3" style="text-align:center">Your rolling 30-day consistency across categories.</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- KNOWLEDGE VAULT -->
+    <div id="page-knowledge" class="page">
+      <div class="mb4"><div class="stit">💡 Knowledge Vault</div><div class="ssub">Your personal growth wiki, notes, and references</div></div>
+      <div class="flex gap3 mb4" style="flex-wrap:wrap">
+        <input type="text" class="fi" id="knowledge-search" placeholder="🔍 Search topic, content or tags..." style="max-width:300px" oninput="handleKnowledgeSearch()">
+        <select class="fsl" id="knowledge-cat-filter" onchange="handleKnowledgeCategoryFilter(this.value)" style="max-width:200px">
+          <option value="All">All Categories</option>
+        </select>
+        <button class="btn bp" style="margin-left:auto" onclick="openKnowledgeModal()">+ Add Note</button>
+      </div>
+      
+      <div class="mb4 flex gap2" id="knowledge-tags" style="flex-wrap:wrap"></div>
+      
+      <div class="k-grid" id="knowledge-list"></div>
+    </div>
+
+    <!-- CHALLENGES -->
+    <div id="page-challenges" class="page">
+      <div class="mb4"><div class="stit">🏆 Challenge System</div><div class="ssub">Take on goal-driven streaks and habits</div></div>
+      <div class="flex jb aic mb4">
+        <h4 class="ct" style="font-size:15px">Active Challenges</h4>
+        <button class="btn bp btn-sm" onclick="openChallengeModal()">+ Start Challenge</button>
+      </div>
+      <div class="ch-grid-main" id="challenges-container"></div>
+    </div>
+
+    <!-- LIFE TIMELINE -->
+    <div id="page-timeline" class="page">
+      <div class="mb4"><div class="stit">🌍 Life Timeline</div><div class="ssub">Your personal history and key milestones</div></div>
+      <div class="flex jb aic mb4">
+        <h4 class="ct" style="font-size:15px">Personal Chronology</h4>
+        <button class="btn bp btn-sm" onclick="openTimelineEventModal()">+ Add Event</button>
+      </div>
+      <div class="timeline-container" id="timeline-list"></div>
+    </div>
+
+    <!-- PERFORMANCE REVIEWS -->
+    <div id="page-reviews" class="page">
+      <div class="mb4"><div class="stit">📊 Performance Reviews</div><div class="ssub">Weekly, Monthly, and Yearly auto-generated growth reports</div></div>
+      <div id="reviews-container"></div>
+    </div>
+
   </div>
 </main>
 </div>
@@ -746,6 +820,82 @@ body{font-family:'Inter',sans-serif;background-color:#050912;background-image:ra
       </div>
     </div>
     <div class="mf"><button class="btn bg" onclick="closeCustomTimerModal()">Cancel</button><button class="btn bp" onclick="saveCustomTimer()">Set Timer</button></div>
+  </div>
+</div>
+
+<!-- LIFE AREA MODAL -->
+<div id="m-lifearea" class="mo hid">
+  <div class="mb" style="max-width:400px">
+    <div class="mh"><h3 id="lam-title">🌱 Add Life Area</h3><button class="btn bg btn-ico" onclick="closeLifeAreaModal()">✕</button></div>
+    <div class="mbd">
+      <input type="hidden" id="la-eid">
+      <div class="fg"><label class="fl">Name *</label><input class="fi" id="la-name" placeholder="e.g. Health, Spirituality, Family..."></div>
+      <div class="fg"><label class="fl">Icon</label><div class="ig la-icons-sel" id="la-icons"></div></div>
+      <div class="fg"><label class="fl">Color</label><div class="csw la-colors-sel" id="la-colors"></div></div>
+    </div>
+    <div class="mf"><button class="btn bg" onclick="closeLifeAreaModal()">Cancel</button><button class="btn bp" onclick="saveLifeArea()">Save Life Area</button></div>
+  </div>
+</div>
+
+<!-- KNOWLEDGE MODAL -->
+<div id="m-knowledge" class="mo hid">
+  <div class="mb" style="max-width:550px">
+    <div class="mh"><h3 id="km-title">💡 Add Note</h3><button class="btn bg btn-ico" onclick="closeKnowledgeModal()">✕</button></div>
+    <div class="mbd">
+      <input type="hidden" id="k-eid">
+      <div class="fg"><label class="fl">Topic *</label><input class="fi" id="k-topic" placeholder="e.g. Cognitive Biases in Decision Making..."></div>
+      <div class="fr">
+        <div class="fg"><label class="fl">Category</label><select class="fsl" id="k-cat"></select></div>
+        <div class="fg"><label class="fl">Tags (comma separated)</label><input class="fi" id="k-tags" placeholder="e.g. mental models, wisdom"></div>
+      </div>
+      <div class="fg"><label class="fl">Content *</label><textarea class="fta" id="k-content" placeholder="Write down your thoughts, notes or references..." style="min-height:150px"></textarea></div>
+    </div>
+    <div class="mf"><button class="btn bg" onclick="closeKnowledgeModal()">Cancel</button><button class="btn bp" onclick="saveKnowledge()">Save Note</button></div>
+  </div>
+</div>
+
+<!-- CHALLENGE MODAL -->
+<div id="m-challenge" class="mo hid">
+  <div class="mb" style="max-width:500px">
+    <div class="mh"><h3 id="chm-title">🏆 Start Challenge</h3><button class="btn bg btn-ico" onclick="closeChallengeModal()">✕</button></div>
+    <div class="mbd">
+      <input type="hidden" id="ch-eid">
+      <div class="fg"><label class="fl">Challenge Title *</label><input class="fi" id="ch-title" placeholder="e.g. 30-Day Sleep Reset..."></div>
+      <div class="fr">
+        <div class="fg"><label class="fl">Duration (Days)</label><input class="fi" id="ch-days" type="number" value="30" min="1" max="365"></div>
+      </div>
+      <div class="fg"><label class="fl">Icon</label><div class="ig ch-icons-sel" id="ch-icons"></div></div>
+      <div class="fg"><label class="fl">Color</label><div class="csw ch-colors-sel" id="ch-colors"></div></div>
+      <div class="fg"><label class="fl">Milestones (one per line, format: Day X: Text)</label>
+        <textarea class="fta" id="ch-ms" placeholder="Day 7: First week consistency&#10;Day 15: Halfway victory&#10;Day 30: Challenge conqueror" style="min-height:90px"></textarea>
+      </div>
+    </div>
+    <div class="mf"><button class="btn bg" onclick="closeChallengeModal()">Cancel</button><button class="btn bp" onclick="saveChallenge()">Save Challenge</button></div>
+  </div>
+</div>
+
+<!-- TIMELINE EVENT MODAL -->
+<div id="m-timeline-event" class="mo hid">
+  <div class="mb" style="max-width:450px">
+    <div class="mh"><h3>🌍 Add Life Event</h3><button class="btn bg btn-ico" onclick="closeTimelineEventModal()">✕</button></div>
+    <div class="mbd">
+      <div class="fg"><label class="fl">Event Title *</label><input class="fi" id="te-title" placeholder="e.g. Graduated University, Hit 100 days streak..."></div>
+      <div class="fr">
+        <div class="fg"><label class="fl">Date</label><input class="fi" id="te-date" type="date"></div>
+        <div class="fg">
+          <label class="fl">Event Type</label>
+          <select class="fsl" id="te-type">
+            <option value="milestone">✨ Milestone</option>
+            <option value="habit">✅ Habit Milestone</option>
+            <option value="goal">🎯 Goal Met</option>
+            <option value="challenge">🏆 Challenge Win</option>
+            <option value="custom">✏️ Custom Event</option>
+          </select>
+        </div>
+      </div>
+      <div class="fg"><label class="fl">Detail *</label><textarea class="fta" id="te-detail" placeholder="Describe this milestone..." style="min-height:80px"></textarea></div>
+    </div>
+    <div class="mf"><button class="btn bg" onclick="closeTimelineEventModal()">Cancel</button><button class="btn bp" onclick="saveTimelineEvent()">Save Event</button></div>
   </div>
 </div>
 
@@ -960,7 +1110,20 @@ let curPage='dashboard',charts={};
 let selMoodVal='good',jCalY=new Date().getFullYear(),jCalM=new Date().getMonth();
 
 // ── PERSISTENCE ──
-function save(){try{localStorage.setItem('mo_v3',JSON.stringify(S));}catch(e){}}
+let _isCalculatingScore = false;
+function save(){
+  try{
+    localStorage.setItem('mo_v3',JSON.stringify(S));
+    if (!_isCalculatingScore && typeof updateTodayProductivityScore === 'function') {
+      _isCalculatingScore = true;
+      try {
+        updateTodayProductivityScore();
+      } finally {
+        _isCalculatingScore = false;
+      }
+    }
+  }catch(e){}
+}
 function load(){
   try{
     const r=localStorage.getItem('mo_v3');
@@ -978,6 +1141,22 @@ function load(){
       if(!S.focusStreak) S.focusStreak = { currentStreak: 0, longestStreak: 0, lastFocusedDate: '' };
       if(!S.habitStatusSettings) S.habitStatusSettings = { lateStreakRule: 'maintain', autoCloseTime: '23:59', backfillWindow: 24, habitNotifications: true };
       if(!S.auditLog) S.auditLog = [];
+
+      // Migrate: Evolution modules
+      if(!S.lifeAreas || S.lifeAreas.length === 0) {
+        S.lifeAreas = [
+          { id: 'la_learning', name: 'Learning', icon: '📚', color: '#3b82f6', archived: false, order: 0 },
+          { id: 'la_fitness', name: 'Fitness', icon: '🏋️', color: '#ef4444', archived: false, order: 1 },
+          { id: 'la_career', name: 'Career', icon: '💻', color: '#8b5cf6', archived: false, order: 2 },
+          { id: 'la_finance', name: 'Finance', icon: '💰', color: '#10b981', archived: false, order: 3 },
+          { id: 'la_mental', name: 'Mental Health', icon: '🧠', color: '#06b6d4', archived: false, order: 4 },
+          { id: 'la_relationships', name: 'Relationships', icon: '❤️', color: '#ec4899', archived: false, order: 5 }
+        ];
+      }
+      if(!S.knowledge) S.knowledge = [];
+      if(!S.challenges) S.challenges = [];
+      if(!S.timeline) S.timeline = [];
+      if(!S.productivityScores) S.productivityScores = {};
 
       // Clear demo data on first load after this change
       if(!S.demoPurged){
@@ -1010,6 +1189,18 @@ function seedDefaults(){
   S.focusStreak = { currentStreak: 0, longestStreak: 0, lastFocusedDate: '' };
   S.habitStatusSettings = { lateStreakRule: 'maintain', autoCloseTime: '23:59', backfillWindow: 24, habitNotifications: true };
   S.auditLog = [];
+  S.lifeAreas = [
+    { id: 'la_learning', name: 'Learning', icon: '📚', color: '#3b82f6', archived: false, order: 0 },
+    { id: 'la_fitness', name: 'Fitness', icon: '🏋️', color: '#ef4444', archived: false, order: 1 },
+    { id: 'la_career', name: 'Career', icon: '💻', color: '#8b5cf6', archived: false, order: 2 },
+    { id: 'la_finance', name: 'Finance', icon: '💰', color: '#10b981', archived: false, order: 3 },
+    { id: 'la_mental', name: 'Mental Health', icon: '🧠', color: '#06b6d4', archived: false, order: 4 },
+    { id: 'la_relationships', name: 'Relationships', icon: '❤️', color: '#ec4899', archived: false, order: 5 }
+  ];
+  S.knowledge = [];
+  S.challenges = [];
+  S.timeline = [];
+  S.productivityScores = {};
   S.demoPurged=true;
   save();
 }
@@ -1071,14 +1262,59 @@ function overallStats(){
 function go(page){
   curPage=page;
   document.querySelectorAll('.ni').forEach(el=>el.classList.toggle('active',el.dataset.p===page));
-  const titles={dashboard:'Dashboard',matrix:'Calendar',habits:'Manage Habits',planner:'Planner',focus:'Focus Hub',analytics:'Analytics',goals:'Goals',journal:'Journal',settings:'Settings'};
-  const subs={dashboard:'Your personal growth command center',matrix:'Spreadsheet-style habit tracker — click cells to toggle',habits:'Add, edit and organise your habits',planner:'Daily tasks, productivity scores & reflections',focus:'🎯 Deep work, Pomodoros, and focus analytics',analytics:'Deep insights into your habits and tasks',goals:'Long-term goals with milestones',journal:'Daily reflections and mood tracking',settings:'Customise your Momentum experience'};
+  const titles={
+    dashboard:'Dashboard',
+    matrix:'Calendar',
+    habits:'Manage Habits',
+    planner:'Planner',
+    focus:'Focus Hub',
+    analytics:'Analytics',
+    goals:'Goals',
+    journal:'Journal',
+    settings:'Settings',
+    lifeareas:'Life Areas',
+    knowledge:'Knowledge Vault',
+    challenges:'Challenges',
+    timeline:'Life Timeline',
+    reviews:'Performance Reviews'
+  };
+  const subs={
+    dashboard:'Your personal growth command center',
+    matrix:'Spreadsheet-style habit tracker — click cells to toggle',
+    habits:'Add, edit and organise your habits',
+    planner:'Daily tasks, productivity scores & reflections',
+    focus:'🎯 Deep work, Pomodoros, and focus analytics',
+    analytics:'Deep insights into your habits and tasks',
+    goals:'Long-term goals with milestones',
+    journal:'Daily reflections and mood tracking',
+    settings:'Customise your Momentum experience',
+    lifeareas:'Organize and balance your custom dimensions of life',
+    knowledge:'💡 Your personal growth wiki, notes, and references',
+    challenges:'🏆 Take on goal-driven streaks and habits',
+    timeline:'🌍 Your personal history and key milestones',
+    reviews:'📊 Weekly, Monthly, and Yearly auto-generated growth reports'
+  };
   document.getElementById('tb-title').textContent=titles[page]||page;
   document.getElementById('tb-sub').textContent=subs[page]||'';
   document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
   const el=document.getElementById('page-'+page);if(el)el.classList.add('active');
-  if(page!=='analytics' && page!=='focus')destroyCharts();
-  const fns={dashboard:rDash,matrix:rMatrix,habits:()=>renderHabits('all'),planner:()=>PlannerPage.render(),focus:()=>typeof rFocus==='function'&&rFocus(),analytics:rAnalytics,goals:rGoals,journal:rJournal,settings:rSettings};
+  if(page!=='analytics' && page!=='focus' && page!=='lifeareas')destroyCharts();
+  const fns={
+    dashboard:rDash,
+    matrix:rMatrix,
+    habits:()=>renderHabits('all'),
+    planner:()=>PlannerPage.render(),
+    focus:()=>typeof rFocus==='function'&&rFocus(),
+    analytics:rAnalytics,
+    goals:rGoals,
+    journal:rJournal,
+    settings:rSettings,
+    lifeareas:()=>typeof renderLifeAreas==='function'&&renderLifeAreas(),
+    knowledge:()=>typeof renderKnowledge==='function'&&renderKnowledge(),
+    challenges:()=>typeof renderChallenges==='function'&&renderChallenges(),
+    timeline:()=>typeof renderTimeline==='function'&&renderTimeline(),
+    reviews:()=>typeof renderReviews==='function'&&renderReviews()
+  };
   if(fns[page])fns[page]();
   document.querySelector('.content').scrollTo(0,0);
 }
@@ -1185,6 +1421,10 @@ function rDash(){
     document.getElementById('streak-leaders').innerHTML='<div class="txs tm" style="padding:10px 0">No active streaks yet.</div>';
   } else {
     document.getElementById('streak-leaders').innerHTML=leaders.map(({h,s})=>`<div class="flex aic gap2 mb3"><span style="font-size:14px">${h.icon}</span><div style="flex:1"><div style="font-size:11px;font-weight:600">${h.name}</div><div style="height:3px;background:rgba(148,163,184,.1);border-radius:2px;margin-top:3px"><div style="height:100%;width:${Math.min(100,(s.streak/40)*100)}%;background:linear-gradient(90deg,#8b5cf6,#6366f1);border-radius:2px"></div></div></div><span style="font-size:11px;font-weight:700;color:var(--amber)">${s.streak}🔥</span></div>`).join('');
+  }
+  
+  if (typeof renderProductivityScoreWidget === 'function') {
+    renderProductivityScoreWidget();
   }
 }
 
@@ -1322,7 +1562,16 @@ function openHabitModal(eid){
   document.getElementById('h-eid').value=eid||'';
   document.getElementById('hm-title').textContent=hb?`✏️ Edit: ${hb.name}`:'✨ Add New Habit';
   document.getElementById('h-name').value=hb?hb.name:'';
-  document.getElementById('h-cat').value=hb?hb.category:'Fitness';
+
+  // Populate category options dynamically
+  if (typeof getLifeAreaCategories === 'function') {
+    const hCat = document.getElementById('h-cat');
+    if (hCat) {
+      hCat.innerHTML = getLifeAreaCategories().map(c => `<option>${c}</option>`).join('');
+    }
+  }
+
+  document.getElementById('h-cat').value=hb?hb.category:(typeof getLifeAreaCategories === 'function' ? (getLifeAreaCategories()[0] || 'Fitness') : 'Fitness');
   document.getElementById('h-freq').value=hb?hb.freq:'daily';
   document.getElementById('h-rem').value=hb?hb.reminder||'07:00':'07:00';
   document.getElementById('h-note').value=hb?hb.note||'':'';
@@ -1615,8 +1864,8 @@ function resetData(){document.getElementById('conf-icon').textContent='⚠️';d
 function toast(msg,type='info'){const ico={success:'✅',error:'❌',info:'ℹ️'};const el=document.createElement('div');el.className=`toast ${type}`;el.innerHTML=`<span>${ico[type]}</span><span>${msg}</span>`;document.getElementById('toasts').appendChild(el);setTimeout(()=>el.remove(),3200);}
 
 // ── MODAL CLOSE ON BACKDROP ──
-document.querySelectorAll('.mo').forEach(mo=>{mo.addEventListener('click',function(e){if(e.target===this){if(this.id==='m-habit')closeHM();else if(this.id==='m-goal')closeGM();else if(this.id==='m-miss')closeMM();else if(this.id==='m-confirm')closeConf();else if(this.id==='m-task')closeTaskModal();}});});
-document.addEventListener('keydown',e=>{if(e.key==='Escape'){closeHM();closeGM();closeMM();closeConf();if(typeof closeTaskModal!=='undefined')closeTaskModal();if(typeof closeHabitDetail!=='undefined')closeHabitDetail();}});
+document.querySelectorAll('.mo').forEach(mo=>{mo.addEventListener('click',function(e){if(e.target===this){if(this.id==='m-habit')closeHM();else if(this.id==='m-goal')closeGM();else if(this.id==='m-miss')closeMM();else if(this.id==='m-confirm')closeConf();else if(this.id==='m-task')closeTaskModal();else if(this.id==='m-lifearea')closeLifeAreaModal();else if(this.id==='m-knowledge')closeKnowledgeModal();else if(this.id==='m-challenge')closeChallengeModal();else if(this.id==='m-timeline-event')closeTimelineEventModal();}});});
+document.addEventListener('keydown',e=>{if(e.key==='Escape'){closeHM();closeGM();closeMM();closeConf();if(typeof closeTaskModal!=='undefined')closeTaskModal();if(typeof closeHabitDetail!=='undefined')closeHabitDetail();if(typeof closeLifeAreaModal!=='undefined')closeLifeAreaModal();if(typeof closeKnowledgeModal!=='undefined')closeKnowledgeModal();if(typeof closeChallengeModal!=='undefined')closeChallengeModal();if(typeof closeTimelineEventModal!=='undefined')closeTimelineEventModal();}});
 </script>
 
 <!-- ── Planner Module ──────────────────────────────────────────────────── -->
@@ -1631,9 +1880,27 @@ document.addEventListener('keydown',e=>{if(e.key==='Escape'){closeHM();closeGM()
 <!-- ── Focus Hub Module ──────────────────────────────────────────────── -->
 <script src="/js/focus.js"></script>
 
+<!-- ── Custom Life Areas Module ──────────────────────────────────────── -->
+<script src="/js/lifeareas.js"></script>
+
+<!-- ── Knowledge Vault Module ────────────────────────────────────────── -->
+<script src="/js/knowledge.js"></script>
+
+<!-- ── Challenge System Module ───────────────────────────────────────── -->
+<script src="/js/challenges.js"></script>
+
+<!-- ── Life Timeline Module ──────────────────────────────────────────── -->
+<script src="/js/timeline.js"></script>
+
+<!-- ── Productivity Score & Reviews Module ────────────────────────────── -->
+<script src="/js/productivity.js"></script>
+
 <script>
 // ── INIT ──
 load();
+if (typeof initProductivityScores === 'function') {
+  initProductivityScores();
+}
 go('dashboard');
 </script>
 
