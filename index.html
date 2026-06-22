@@ -1023,8 +1023,8 @@ function mnName(m){return['January','February','March','April','May','June','Jul
 function dim(y,m){return new Date(y,m+1,0).getDate();}
 function gc(hid,ds){return S.completions[hid+'_'+ds]||'';}
 function sc(hid,ds,v){S.completions[hid+'_'+ds]=v;save();}
-// Four-status cycle: Pending(empty) → Completed(dn) → Missed(ms) → Pending
-function cycleC(hid,ds){const c=gc(hid,ds);const n=c===''?'dn':c==='dn'?'ms':'';sc(hid,ds,n);return n;}
+// Five-status cycle: Pending(empty) → Completed(dn) → Partial(pt) → Missed(ms) → Pending
+function cycleC(hid,ds){const c=gc(hid,ds);const n=c===''?'dn':c==='dn'?'pt':c==='pt'?'ms':'';sc(hid,ds,n);return n;}
 
 function hStats(hid){
   const now=new Date();now.setHours(0,0,0,0);

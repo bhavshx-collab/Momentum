@@ -710,18 +710,19 @@ function clickCellVersioned(hid, ds, el) {
   const yesterdayStr = fd(yesterday);
 
   if (ds === todayStr) {
-    // Today: four-status cycle empty → dn → ms → empty
+    // Today: cycle empty → dn → pt → ms → empty
     const cur = gc(hid, ds);
-    const next = cur === '' ? 'dn' : cur === 'dn' ? 'ms' : '';
+    const next = cur === '' ? 'dn' : cur === 'dn' ? 'pt' : cur === 'pt' ? 'ms' : '';
     scVersioned(hid, ds, next);
     syncMatrixCellUI(el, next, ds);
     if (next === 'ms') showMissModal(hid, ds);
   } else if (ds === yesterdayStr) {
-    // Yesterday (backfill window): empty → dn_late → ms → empty
+    // Yesterday (backfill window): empty → dn_late → pt → ms → empty
     const cur = gc(hid, ds);
     let next = '';
     if (cur === '') next = 'dn_late';
-    else if (cur === 'dn_late') next = 'ms';
+    else if (cur === 'dn_late') next = 'pt';
+    else if (cur === 'pt') next = 'ms';
     else if (cur === 'ms') next = '';
     
     scVersioned(hid, ds, next);
@@ -732,7 +733,8 @@ function clickCellVersioned(hid, ds, el) {
     const cur = gc(hid, ds);
     let next = '';
     if (cur === '') next = 'dn';
-    else if (cur === 'dn' || cur === 'dn_late') next = 'ms';
+    else if (cur === 'dn' || cur === 'dn_late') next = 'pt';
+    else if (cur === 'pt') next = 'ms';
     else if (cur === 'ms') next = '';
 
     openAuditModal(hid, ds, next);
@@ -753,6 +755,9 @@ function syncMatrixCellUI(el, next, ds) {
   } else if (next === 'ms') {
     inner.classList.add('ms');
     inner.textContent = '✗';
+  } else if (next === 'pt') {
+    inner.classList.add('pt');
+    inner.textContent = '~';
   } else {
     inner.textContent = '';
   }
@@ -763,7 +768,7 @@ function syncMatrixCellUI(el, next, ds) {
   
   const hid = hidFromCell(el);
   const hb = S.habits.find(x => x.id === hid);
-  const lb = { dn: '✅ Done', dn_late: '🕒 Done Late', ms: '❌ Missed', '': '⚫ Cleared' };
+  const lb = { dn: '✅ Done', dn_late: '🕒 Done Late', ms: '❌ Missed', pt: '🟡 Partial', '': '⚫ Cleared' };
   toast(`${hb ? hb.name : 'Habit'} → ${lb[next] || 'Updated'}`, (next === 'dn' || next === 'dn_late') ? 'success' : 'info');
   
   if (typeof rMxSummary === 'function') {

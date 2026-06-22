@@ -19,6 +19,7 @@
 // ────────────────────────────────────────────────────────────────
 
 let _rtLastCheckedMinute = '';
+let _rtLastCheckedDate = '';
 let _rtDrawerFilter = 'all';
 
 function realtimeEnsureData() {
@@ -382,6 +383,17 @@ function checkRemindersLoop() {
   const dateStr = fd(now);
   const timeStr = now.toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit' });
 
+  // ── Day-change detection ──
+  // Fires when the date changes (midnight crossed or app opened on a new day)
+  if (_rtLastCheckedDate && _rtLastCheckedDate !== dateStr) {
+    // Day has changed — close any pending/partial habits from the previous day as Missed
+    autoClosePendingHabits(_rtLastCheckedDate);
+    // Also run retroactive sweep for older missed days (up to 30 days back)
+    runRetroactiveHabitSweep();
+    toast('⏰ New day! Unfinished habits from yesterday have been auto-closed.', 'info');
+  }
+  _rtLastCheckedDate = dateStr;
+
   // Only run minute-level notifications once when the minute ticks
   if (timeStr !== _rtLastCheckedMinute) {
     _rtLastCheckedMinute = timeStr;
@@ -393,7 +405,7 @@ function checkRemindersLoop() {
     checkDailyReview(dateStr, timeStr);
     checkTomorrowPreview(dateStr, timeStr);
     
-    // Habit Status Engine: Auto-close check
+    // Habit Status Engine: Auto-close at user-defined end-of-day time
     const autoCloseTime = (S.habitStatusSettings && S.habitStatusSettings.autoCloseTime) || '23:59';
     if (timeStr === autoCloseTime) {
       autoClosePendingHabits(dateStr);
@@ -415,18 +427,23 @@ function autoClosePendingHabits(dateStr) {
   let countClosed = 0;
   S.habits.forEach(h => {
     const s = gc(h.id, dateStr);
-    if (s === '' || s === undefined) {
+    // Auto-close truly pending habits (empty string means never touched)
+    // Partial (pt) habits are also auto-closed to Missed since the day ended
+    if (s === '' || s === undefined || s === 'pt') {
       sc(h.id, dateStr, 'ms');
       countClosed++;
     }
   });
   if (countClosed > 0) {
     save();
-    toast(`⏰ Auto-closed ${countClosed} pending habits to Missed.`, 'info');
-    if (S.habitStatusSettings.habitNotifications) {
+    toast(`⏰ Auto-closed ${countClosed} habit(s) as Missed for ${dateStr}.`, 'info');
+    // Refresh current page UI
+    if (typeof rDash === 'function' && curPage === 'dashboard') rDash();
+    if (typeof rMatrix === 'function' && curPage === 'matrix') rMatrix();
+    if (S.habitStatusSettings && S.habitStatusSettings.habitNotifications) {
       triggerNotification(
-        '⚠️ Habits Closed',
-        `${countClosed} pending habits were auto-closed to Missed. You have 24 hours to mark them Completed Late.`,
+        '⚠️ Day Closed — Habits Auto-Missed',
+        `${countClosed} pending/partial habit(s) were auto-closed to Missed. You can still log Completed Late from the dashboard.`,
         'system',
         () => go('dashboard')
       );
@@ -473,7 +490,8 @@ function runRetroactiveHabitSweep() {
       if (h.createdAt && h.createdAt > ds) return;
       
       const s = gc(h.id, ds);
-      if (s === '' || s === undefined) {
+      // Close both empty (never logged) AND partial (started but not finished) as Missed
+      if (s === '' || s === undefined || s === 'pt') {
         sc(h.id, ds, 'ms');
         sweepCount++;
       }
@@ -481,7 +499,7 @@ function runRetroactiveHabitSweep() {
   }
   if (sweepCount > 0) {
     save();
-    console.log(`[Habit Status Engine] Retroactive sweep closed ${sweepCount} unlogged slots as Missed.`);
+    console.log(`[Habit Status Engine] Retroactive sweep closed ${sweepCount} unlogged/partial slots as Missed.`);
   }
 }
 
