@@ -128,6 +128,7 @@ function getVersionStats(habit, version) {
   const startDate = version.startDate;
   const endDate   = version.endDate || fd(new Date());
   const now = new Date(); now.setHours(0, 0, 0, 0);
+  const rule = (S.habitStatusSettings && S.habitStatusSettings.lateStreakRule) || 'maintain';
 
   let done = 0, total = 0, streak = 0, best = 0, tmp = 0;
 
@@ -138,8 +139,9 @@ function getVersionStats(habit, version) {
   while (cur <= end && cur <= now) {
     const ds = fd(cur);
     const s = gc(habit.id, ds);
-    if (s === 'dn') { done++; tmp++; best = Math.max(best, tmp); }
-    else if (s) { tmp = 0; }
+    const isCompleted = s === 'dn' || s === 'dn_late';
+    if (isCompleted) { done++; tmp++; best = Math.max(best, tmp); }
+    else if (s === 'ms') { tmp = 0; }
     if (s) total++;
     cur.setDate(cur.getDate() + 1);
   }
@@ -148,8 +150,9 @@ function getVersionStats(habit, version) {
   let scanDate = new Date(Math.min(end.getTime(), now.getTime()));
   while (scanDate >= new Date(startDate + 'T00:00:00')) {
     const s = gc(habit.id, fd(scanDate));
-    if (s === 'dn') streak++;
-    else if (s === 'ms') break;
+    const countsForStreak = s === 'dn' || (s === 'dn_late' && rule === 'maintain');
+    if (countsForStreak) streak++;
+    else if (s === 'ms' || s === 'dn_late') break;
     else break;
     scanDate.setDate(scanDate.getDate() - 1);
   }
@@ -707,29 +710,29 @@ function clickCellVersioned(hid, ds, el) {
   const yesterdayStr = fd(yesterday);
 
   if (ds === todayStr) {
-    // Normal cycle for today
-    const next = cycleC(hid, ds);
+    // Today: four-status cycle empty → dn → ms → empty
+    const cur = gc(hid, ds);
+    const next = cur === '' ? 'dn' : cur === 'dn' ? 'ms' : '';
+    scVersioned(hid, ds, next);
     syncMatrixCellUI(el, next, ds);
     if (next === 'ms') showMissModal(hid, ds);
   } else if (ds === yesterdayStr) {
-    // Yesterday cycle: empty -> dn_late -> pt -> ms -> empty
+    // Yesterday (backfill window): empty → dn_late → ms → empty
     const cur = gc(hid, ds);
     let next = '';
     if (cur === '') next = 'dn_late';
-    else if (cur === 'dn_late') next = 'pt';
-    else if (cur === 'pt') next = 'ms';
+    else if (cur === 'dn_late') next = 'ms';
     else if (cur === 'ms') next = '';
     
-    sc(hid, ds, next);
+    scVersioned(hid, ds, next);
     syncMatrixCellUI(el, next, ds);
     if (next === 'ms') showMissModal(hid, ds);
   } else {
-    // Older than yesterday: require reason
+    // Older than yesterday: require reason via audit modal
     const cur = gc(hid, ds);
     let next = '';
     if (cur === '') next = 'dn';
-    else if (cur === 'dn' || cur === 'dn_late') next = 'pt';
-    else if (cur === 'pt') next = 'ms';
+    else if (cur === 'dn' || cur === 'dn_late') next = 'ms';
     else if (cur === 'ms') next = '';
 
     openAuditModal(hid, ds, next);
@@ -750,9 +753,6 @@ function syncMatrixCellUI(el, next, ds) {
   } else if (next === 'ms') {
     inner.classList.add('ms');
     inner.textContent = '✗';
-  } else if (next === 'pt') {
-    inner.classList.add('pt');
-    inner.textContent = '~';
   } else {
     inner.textContent = '';
   }
@@ -763,7 +763,7 @@ function syncMatrixCellUI(el, next, ds) {
   
   const hid = hidFromCell(el);
   const hb = S.habits.find(x => x.id === hid);
-  const lb = { dn: '✅ Done', dn_late: '✅ Done Late', ms: '❌ Missed', pt: '🟡 Partial', '': '⚫ Cleared' };
+  const lb = { dn: '✅ Done', dn_late: '🕒 Done Late', ms: '❌ Missed', '': '⚫ Cleared' };
   toast(`${hb ? hb.name : 'Habit'} → ${lb[next] || 'Updated'}`, (next === 'dn' || next === 'dn_late') ? 'success' : 'info');
   
   if (typeof rMxSummary === 'function') {
