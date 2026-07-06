@@ -1238,6 +1238,14 @@ function fFull(ds){return new Date(ds+'T00:00:00').toLocaleDateString('en-IN',{w
 function mnName(m){return['January','February','March','April','May','June','July','August','September','October','November','December'][m];}
 function dim(y,m){return new Date(y,m+1,0).getDate();}
 function gc(hid,ds){return S.completions[hid+'_'+ds]||'';}
+// ── GLOBAL ALIASES for Evolution Modules ──
+// These aliases make productivity.js, challenges.js, knowledge.js, timeline.js work
+// without needing the separate data.js module.
+function today(){return ts();}
+function formatDate(d){return fd(d);}
+function getDayName(ds){return new Date(ds+'T00:00:00').toLocaleDateString('en-US',{weekday:'long'});}
+function selectColorSwatch(el,selClass){document.querySelectorAll('.'+selClass).forEach(s=>s.classList.remove('sel'));el.classList.add('sel');}
+window.today=today; window.formatDate=formatDate; window.getDayName=getDayName; window.selectColorSwatch=selectColorSwatch;
 function sc(hid,ds,v){S.completions[hid+'_'+ds]=v;save();}
 // Five-status cycle: Pending(empty) → Completed(dn) → Partial(pt) → Missed(ms) → Pending
 function cycleC(hid,ds){const c=gc(hid,ds);const n=c===''?'dn':c==='dn'?'pt':c==='pt'?'ms':'';sc(hid,ds,n);return n;}
