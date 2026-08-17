@@ -1,6 +1,7 @@
 /**
- * data.js — Persistence layer (localStorage)
- * All state management and data access
+ * data.js — Persistence layer (localStorage + Supabase)
+ * All state management and data access.
+ * localStorage is used as local cache; Supabase is the permanent store.
  */
 
 const DB_KEY = 'momentum_v1';
@@ -67,6 +68,10 @@ const DB = {
 
   save() {
     localStorage.setItem(DB_KEY, JSON.stringify(this._data));
+    // Also sync to Supabase settings (debounced)
+    if (window.momentumUser && typeof SDB !== 'undefined') {
+      SDB.syncAll(this._data).catch(e => console.warn('[DB.save] Supabase sync error:', e));
+    }
   },
 
   get() {
@@ -83,12 +88,23 @@ const DB = {
     habit.createdAt = formatDate(new Date());
     this.get().habits.push(habit);
     this.save();
+    // Sync to Supabase
+    if (window.momentumUser && typeof SDB !== 'undefined') {
+      SDB.saveHabit(habit).catch(e => console.warn('[DB] saveHabit error:', e));
+    }
     return habit;
   },
   updateHabit(id, updates) {
     const habits = this.get().habits;
     const idx = habits.findIndex(h => h.id === id);
-    if (idx >= 0) { habits[idx] = { ...habits[idx], ...updates }; this.save(); }
+    if (idx >= 0) {
+      habits[idx] = { ...habits[idx], ...updates };
+      this.save();
+      // Sync to Supabase
+      if (window.momentumUser && typeof SDB !== 'undefined') {
+        SDB.saveHabit(habits[idx]).catch(e => console.warn('[DB] updateHabit error:', e));
+      }
+    }
   },
   deleteHabit(id) {
     this.updateHabit(id, { active: false });
@@ -101,6 +117,10 @@ const DB = {
   setCompletion(habitId, dateStr, state) {
     this.get().completions[`${habitId}_${dateStr}`] = state;
     this.save();
+    // Sync to Supabase
+    if (window.momentumUser && typeof SDB !== 'undefined') {
+      SDB.setHabitEntry(habitId, dateStr, state).catch(e => console.warn('[DB] setCompletion error:', e));
+    }
   },
   cycleCompletion(habitId, dateStr) {
     const states = ['empty', 'completed', 'partial', 'missed'];
@@ -117,16 +137,31 @@ const DB = {
     goal.id = 'g' + Date.now();
     this.get().goals.push(goal);
     this.save();
+    // Sync to Supabase
+    if (window.momentumUser && typeof SDB !== 'undefined') {
+      SDB.saveGoal(goal).catch(e => console.warn('[DB] addGoal error:', e));
+    }
     return goal;
   },
   updateGoal(id, updates) {
     const goals = this.get().goals;
     const idx = goals.findIndex(g => g.id === id);
-    if (idx >= 0) { goals[idx] = { ...goals[idx], ...updates }; this.save(); }
+    if (idx >= 0) {
+      goals[idx] = { ...goals[idx], ...updates };
+      this.save();
+      // Sync to Supabase
+      if (window.momentumUser && typeof SDB !== 'undefined') {
+        SDB.saveGoal(goals[idx]).catch(e => console.warn('[DB] updateGoal error:', e));
+      }
+    }
   },
   deleteGoal(id) {
     this.get().goals = this.get().goals.filter(g => g.id !== id);
     this.save();
+    // Sync to Supabase
+    if (window.momentumUser && typeof SDB !== 'undefined') {
+      SDB.deleteGoal(id).catch(e => console.warn('[DB] deleteGoal error:', e));
+    }
   },
 
   // Journal
@@ -137,6 +172,10 @@ const DB = {
     const idx = journal.findIndex(j => j.date === entry.date);
     if (idx >= 0) { journal[idx] = entry; } else { entry.id = 'j' + Date.now(); journal.push(entry); }
     this.save();
+    // Sync to Supabase
+    if (window.momentumUser && typeof SDB !== 'undefined') {
+      SDB.saveJournalEntry(entry).catch(e => console.warn('[DB] saveJournalEntry error:', e));
+    }
   },
 
   // Miss reasons

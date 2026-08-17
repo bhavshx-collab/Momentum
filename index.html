@@ -36,6 +36,21 @@
 
 <!-- ── Fonts & Scripts ───────────────────────────────────────────────── -->
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+
+<!-- ── Supabase Client ──────────────────────────────────────────────── -->
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+
+<!-- ── Auth CSS ─────────────────────────────────────────────────────── -->
+<link rel="stylesheet" href="/css/auth.css">
+
+<!-- ── Env Config (set your Supabase keys here) ─────────────────────── -->
+<script>
+  window.__ENV__ = {
+    SUPABASE_URL:      'YOUR_SUPABASE_URL',
+    SUPABASE_ANON_KEY: 'YOUR_SUPABASE_ANON_KEY'
+  };
+</script>
+
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <link rel="stylesheet" href="/css/planner.css">
 <link rel="stylesheet" href="/css/versioning.css">
@@ -300,7 +315,130 @@ body{font-family:'Inter',sans-serif;background-color:#050912;background-image:ra
 </style>
 </head>
 <body>
-<div id="app">
+
+<!-- ── Connection Status Bar ──────────────────────────────────────────── -->
+<div id="connection-status-bar" class="sync-bar" style="display:none"></div>
+
+<!-- ══════════════════════════════════════════════════════════════════════
+     AUTH SCREEN — shown before app loads
+     Hidden once user is authenticated
+════════════════════════════════════════════════════════════════════════ -->
+<div id="auth-screen" style="display:none">
+  <div class="auth-card">
+    <div class="auth-logo">
+      <div class="auth-logo-icon">⚡</div>
+      <div class="auth-logo-text">
+        <div class="auth-logo-name">Momentum</div>
+        <div class="auth-logo-sub">GROWTH OS</div>
+      </div>
+    </div>
+
+    <!-- Tabs -->
+    <div class="auth-tabs">
+      <button class="auth-tab active" id="tab-login" onclick="switchAuthTab('login')">Sign In</button>
+      <button class="auth-tab" id="tab-signup" onclick="switchAuthTab('signup')">Create Account</button>
+    </div>
+
+    <!-- Error message -->
+    <div class="auth-error" id="auth-error"></div>
+
+    <!-- Success message (shown after signup email sent) -->
+    <div class="auth-success-msg" id="auth-success-msg"></div>
+
+    <!-- LOGIN FORM -->
+    <div id="auth-form-login" class="auth-form">
+      <div class="auth-field-group">
+        <label class="auth-label">Email</label>
+        <input class="auth-input" type="email" id="login-email" placeholder="you@example.com" autocomplete="email">
+      </div>
+      <div class="auth-field-group">
+        <label class="auth-label">Password</label>
+        <input class="auth-input" type="password" id="login-password" placeholder="Your password" autocomplete="current-password">
+      </div>
+      <button class="auth-submit-btn" id="auth-submit-btn" onclick="handleAuthSubmit()">Sign In</button>
+    </div>
+
+    <!-- SIGNUP FORM -->
+    <div id="auth-form-signup" class="auth-form" style="display:none">
+      <div class="auth-field-group">
+        <label class="auth-label">Your Name</label>
+        <input class="auth-input" type="text" id="signup-name" placeholder="e.g. Bhavesh" autocomplete="name">
+      </div>
+      <div class="auth-field-group">
+        <label class="auth-label">Email</label>
+        <input class="auth-input" type="email" id="signup-email" placeholder="you@example.com" autocomplete="email">
+      </div>
+      <div class="auth-field-group">
+        <label class="auth-label">Password</label>
+        <input class="auth-input" type="password" id="signup-password" placeholder="At least 6 characters" autocomplete="new-password">
+      </div>
+      <button class="auth-submit-btn" id="auth-submit-btn-signup" onclick="handleAuthSubmit()">Create Account</button>
+    </div>
+
+    <div class="auth-footer-note">
+      🔒 Your data is encrypted and stored securely.<br>
+      <span style="color:#4b5563">Clear browser cache anytime — your data is in the cloud.</span>
+    </div>
+  </div>
+</div>
+
+<!-- Auth Tab / Form switching -->
+<script>
+  (function() {
+    var _authMode = 'login';
+    window.switchAuthTab = function(mode) {
+      _authMode = mode;
+      document.getElementById('tab-login').classList.toggle('active', mode === 'login');
+      document.getElementById('tab-signup').classList.toggle('active', mode === 'signup');
+      document.getElementById('auth-form-login').style.display = mode === 'login' ? 'flex' : 'none';
+      document.getElementById('auth-form-signup').style.display = mode === 'signup' ? 'flex' : 'none';
+      var errEl = document.getElementById('auth-error');
+      if (errEl) errEl.textContent = '';
+    };
+    window.handleAuthSubmit = async function() {
+      var errEl = document.getElementById('auth-error');
+      var succEl = document.getElementById('auth-success-msg');
+      if (errEl) errEl.textContent = '';
+      if (succEl) succEl.style.display = 'none';
+
+      if (_authMode === 'login') {
+        var email = document.getElementById('login-email').value.trim();
+        var pass  = document.getElementById('login-password').value;
+        if (!email || !pass) { if(errEl) errEl.textContent = 'Please fill in all fields.'; return; }
+        var btn = document.getElementById('auth-submit-btn');
+        if(btn) { btn.disabled = true; btn.textContent = 'Signing in...'; }
+        var res = await authLogin(email, pass);
+        if(btn) { btn.disabled = false; btn.textContent = 'Sign In'; }
+      } else {
+        var name  = document.getElementById('signup-name').value.trim();
+        var email = document.getElementById('signup-email').value.trim();
+        var pass  = document.getElementById('signup-password').value;
+        if (!name || !email || !pass) { if(errEl) errEl.textContent = 'Please fill in all fields.'; return; }
+        if (pass.length < 6) { if(errEl) errEl.textContent = 'Password must be at least 6 characters.'; return; }
+        var btn = document.getElementById('auth-submit-btn-signup');
+        if(btn) { btn.disabled = true; btn.textContent = 'Creating account...'; }
+        var res = await authSignup(name, email, pass);
+        if(btn) { btn.disabled = false; btn.textContent = 'Create Account'; }
+        if (res.success && res.needsConfirmation) {
+          if(succEl) { succEl.textContent = '✅ Account created! Check your email to confirm, then sign in.'; succEl.style.display = 'block'; }
+          switchAuthTab('login');
+        }
+      }
+    };
+    // Enter key submits
+    document.addEventListener('keydown', function(e) {
+      if (e.key === 'Enter' && document.getElementById('auth-screen') &&
+          document.getElementById('auth-screen').style.display !== 'none') {
+        handleAuthSubmit();
+      }
+    });
+  })();
+</script>
+
+<!-- ══════════════════════════════════════════════════════════════════════
+     MAIN APP — hidden until authenticated
+════════════════════════════════════════════════════════════════════════ -->
+<div id="app" style="display:none">
 
 <!-- SIDEBAR -->
 <aside class="sb">
@@ -569,8 +707,15 @@ body{font-family:'Inter',sans-serif;background-color:#050912;background-image:ra
             <div class="fg"><label class="fl">Name</label><input class="fi" id="s-name" value="Bhavesh"></div>
             <div class="fg"><label class="fl">Email</label><input class="fi" id="s-email" type="email" value="bhavesh@momentum.app"></div>
           </div>
-          <button class="btn bp" onclick="saveProfile()">Save Profile</button>
+          <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+            <button class="btn bp" onclick="saveProfile()">Save Profile</button>
+            <button class="btn bg" onclick="signOut()" style="color:#f87171;border-color:rgba(239,68,68,0.3)">👋 Sign Out</button>
+            <div id="sync-status-badge" style="font-size:11px;color:#64748b;margin-left:auto">
+              ☁️ <span id="sync-status-text">Connected</span>
+            </div>
+          </div>
         </div>
+
         <!-- Notifications panel populated dynamically by realtime.js -->
         <div id="settings-noti-content" style="grid-column: 1 / -1;"></div>
         <div class="card cp">
@@ -1138,7 +1283,10 @@ let selMoodVal='good',jCalY=new Date().getFullYear(),jCalM=new Date().getMonth()
 let _isCalculatingScore = false;
 function save(){
   try{
+    // 1. Always save to localStorage as local cache
     localStorage.setItem('mo_v3',JSON.stringify(S));
+
+    // 2. Recalculate productivity score (non-recursive)
     if (!_isCalculatingScore && typeof updateTodayProductivityScore === 'function') {
       _isCalculatingScore = true;
       try {
@@ -1147,9 +1295,22 @@ function save(){
         _isCalculatingScore = false;
       }
     }
-  }catch(e){}
+
+    // 3. Async-sync settings to Supabase (debounced)
+    if (window.momentumUser && typeof SDB !== 'undefined') {
+      SDB.syncAll(S).catch(function(e) {
+        console.warn('[Save] Supabase sync error:', e);
+      });
+    }
+  }catch(e){
+    console.warn('[Save] Error:', e);
+  }
 }
 function load(){
+  // NOTE: With Supabase auth, auth.js loads all data via _loadUserData().
+  // This function is now a fallback for:
+  //   (a) initializing default S shape before Supabase loads, and
+  //   (b) loading from localStorage cache when offline.
   try{
     const r=localStorage.getItem('mo_v3');
     if(r){
@@ -1246,7 +1407,14 @@ function formatDate(d){return fd(d);}
 function getDayName(ds){return new Date(ds+'T00:00:00').toLocaleDateString('en-US',{weekday:'long'});}
 function selectColorSwatch(el,selClass){document.querySelectorAll('.'+selClass).forEach(s=>s.classList.remove('sel'));el.classList.add('sel');}
 window.today=today; window.formatDate=formatDate; window.getDayName=getDayName; window.selectColorSwatch=selectColorSwatch;
-function sc(hid,ds,v){S.completions[hid+'_'+ds]=v;save();}
+function sc(hid,ds,v){
+  S.completions[hid+'_'+ds]=v;
+  save();
+  // Sync to Supabase
+  if(window.momentumUser && typeof SDB !== 'undefined'){
+    SDB.setHabitEntry(hid, ds, v).catch(e=>console.warn('[sc] Supabase sync error:',e));
+  }
+}
 // Five-status cycle: Pending(empty) → Completed(dn) → Partial(pt) → Missed(ms) → Pending
 function cycleC(hid,ds){const c=gc(hid,ds);const n=c===''?'dn':c==='dn'?'pt':c==='pt'?'ms':'';sc(hid,ds,n);return n;}
 
@@ -1902,10 +2070,53 @@ function saveStreakSetting(key, val) {
   toast('✅ Setting saved!', 'success');
 }
 window.saveStreakSetting = saveStreakSetting;
-function saveProfile(){const n=document.getElementById('s-name').value.trim();if(!n){toast('Name required','error');return;}S.user.name=n;S.user.email=document.getElementById('s-email').value.trim();save();rSettings();toast('✅ Profile saved!','success');}
+function saveProfile(){
+  const n=document.getElementById('s-name').value.trim();
+  if(!n){toast('Name required','error');return;}
+  S.user.name=n;
+  S.user.email=document.getElementById('s-email').value.trim();
+  save();
+  // Sync profile to Supabase
+  if(window.momentumUser && typeof _supabase !== 'undefined'){
+    _supabase.from('profiles').upsert({
+      id: window.momentumUser.id,
+      name: S.user.name,
+      email: S.user.email,
+    }).catch(e=>console.warn('[saveProfile] Supabase error:', e));
+  }
+  rSettings();
+  toast('✅ Profile saved!','success');
+}
 function togSet(k,el){S.settings[k]=!S.settings[k];el.classList.toggle('on',S.settings[k]);save();toast(`Setting ${S.settings[k]?'enabled':'disabled'}`,'info');}
 function exportData(){const b=new Blob([JSON.stringify(S,null,2)],{type:'application/json'});const a=document.createElement('a');a.href=URL.createObjectURL(b);a.download=`momentum-${ts()}.json`;a.click();toast('📥 Exported!','success');}
-function resetData(){document.getElementById('conf-icon').textContent='⚠️';document.getElementById('conf-title').textContent='Reset All Data';document.getElementById('conf-msg').innerHTML='This will delete <strong>ALL</strong> your data permanently.';document.getElementById('conf-ok').textContent='Reset';document.getElementById('conf-ok').onclick=()=>{localStorage.removeItem('mo_v3');closeConf();location.reload();};document.getElementById('m-confirm').classList.remove('hid');}
+function resetData(){
+  document.getElementById('conf-icon').textContent='⚠️';
+  document.getElementById('conf-title').textContent='Reset All Data';
+  document.getElementById('conf-msg').innerHTML='This will delete <strong>ALL</strong> your local data permanently.';
+  document.getElementById('conf-ok').textContent='Reset';
+  document.getElementById('conf-ok').onclick=()=>{
+    localStorage.removeItem('mo_v3');
+    localStorage.removeItem('momentum_v1');
+    closeConf();
+    // Sign out of Supabase too
+    if(typeof authLogout === 'function'){
+      authLogout().then(()=>location.reload());
+    } else {
+      location.reload();
+    }
+  };
+  document.getElementById('m-confirm').classList.remove('hid');
+}
+
+// ── SIGN OUT (exposed for Settings UI) ──
+window.signOut = function(){
+  if(typeof authLogout === 'function'){
+    authLogout();
+  } else {
+    localStorage.removeItem('mo_v3');
+    location.reload();
+  }
+};
 
 // ── TOAST ──
 function toast(msg,type='info'){const ico={success:'✅',error:'❌',info:'ℹ️'};const el=document.createElement('div');el.className=`toast ${type}`;el.innerHTML=`<span>${ico[type]}</span><span>${msg}</span>`;document.getElementById('toasts').appendChild(el);setTimeout(()=>el.remove(),3200);}
@@ -1942,13 +2153,32 @@ document.addEventListener('keydown',e=>{if(e.key==='Escape'){closeHM();closeGM()
 <!-- ── Productivity Score & Reviews Module ────────────────────────────── -->
 <script src="/js/productivity.js"></script>
 
+<!-- ── Supabase Integration Modules ─────────────────────────────────── -->
+<!-- Load order matters: supabase-client → auth → db-supabase → migration → realtime-supabase -->
+<script src="/js/supabase-client.js"></script>
+<script src="/js/auth.js"></script>
+<script src="/js/db-supabase.js"></script>
+<script src="/js/migration.js"></script>
+<script src="/js/realtime-supabase.js"></script>
+
 <script>
 // ── INIT ──
+// Load localStorage cache immediately so app has data before Supabase responds
 load();
-if (typeof initProductivityScores === 'function') {
-  initProductivityScores();
+
+// auth.js handles authentication and will call _showApp() or _showAuthScreen()
+// based on whether there is a valid session. It also calls go('dashboard') once
+// the user is authenticated and data is loaded from Supabase.
+//
+// If there is no Supabase session, the auth screen will be shown.
+// If the Supabase JS failed to load (network error), fall back to localStorage-only mode.
+if (typeof _supabase === 'undefined' || typeof authLogin === 'undefined') {
+  // Supabase unavailable — run app in offline/local-only mode
+  console.warn('[Init] Supabase unavailable. Running in local-only mode.');
+  if (typeof initProductivityScores === 'function') initProductivityScores();
+  go('dashboard');
 }
-go('dashboard');
+// Otherwise, auth.js onAuthStateChange handles the initial session check.
 </script>
 
 <!-- ── PWA Update Notification ──────────────────────────────────────────── -->
