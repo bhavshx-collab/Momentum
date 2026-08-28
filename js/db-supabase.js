@@ -6,6 +6,23 @@
  * All writes go to BOTH localStorage (cache) AND Supabase (source of truth).
  */
 
+// ── UUID Conversion Helper ─────────────────────────────────────────
+// PostgreSQL UUID columns require valid UUID strings (8-4-4-4-12 hex).
+// Converts legacy string IDs like 'h_1724856123456' to valid UUIDs.
+function toUUID(str) {
+  if (!str) return (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : '00000000-0000-4000-a000-000000000000';
+  if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str)) {
+    return str;
+  }
+  let hex = '';
+  for (let i = 0; i < str.length; i++) {
+    hex += str.charCodeAt(i).toString(16);
+  }
+  hex = (hex + '00000000000000000000000000000000').substring(0, 32);
+  return `${hex.substring(0,8)}-${hex.substring(8,12)}-4${hex.substring(13,16)}-a${hex.substring(17,20)}-${hex.substring(20,32)}`;
+}
+window.toUUID = toUUID;
+
 const SDB = {
 
   // ── HABITS ─────────────────────────────────────────────────────
@@ -13,15 +30,17 @@ const SDB = {
     const uid = getCurrentUserId();
     if (!uid) return;
 
+    const habitUuid = toUUID(habit.id);
+
     const row = {
-      id:            habit.id,
+      id:            habitUuid,
       user_id:       uid,
       name:          habit.name,
-      category:      habit.category,
+      category:      habit.category || 'General',
       frequency:     habit.freq || habit.frequency || 'daily',
-      target:        habit.versions?.find(v => !v.endDate)?.target || '',
-      icon:          habit.icon,
-      color:         habit.color,
+      target:        habit.versions?.find(v => !v.endDate)?.target || habit.target || '',
+      icon:          habit.icon || '💪',
+      color:         habit.color || '#8b5cf6',
       reminder_time: habit.reminder || null,
       note:          habit.note || null,
       is_active:     habit.active !== false,
@@ -34,7 +53,27 @@ const SDB = {
 
     // Save versions too
     if (habit.versions?.length) {
-      await this.saveHabitVersions(habit.id, habit.versions, uid);
+      await this.saveHabitVersions(habitUuid, habit.versions, uid);
+    } else {
+      // Ensure at least one initial version exists
+      const versionUuid = toUUID(`${habit.id}_v1`);
+      await safeUpsert('habit_versions', {
+        id:          versionUuid,
+        habit_id:    habitUuid,
+        user_id:     uid,
+        version_num: 1,
+        name:        habit.name,
+        icon:        habit.icon || '💪',
+        color:       habit.color || '#8b5cf6',
+        category:    habit.category || 'General',
+        frequency:   habit.freq || habit.frequency || 'daily',
+        reminder:    habit.reminder || null,
+        note:        habit.note || null,
+        target:      habit.target || null,
+        start_date:  habit.createdAt || new Date().toISOString().substring(0, 10),
+        end_date:    null,
+        legacy_vid:  `v_${habit.id}`,
+      }, 'id');
     }
   },
 
@@ -42,10 +81,12 @@ const SDB = {
     if (!uid) uid = getCurrentUserId();
     if (!uid) return;
 
+    const habitUuid = toUUID(habitId);
+
     for (const v of versions) {
       const row = {
-        id:         v._dbId || v.vid || undefined,
-        habit_id:   habitId,
+        id:         toUUID(v._dbId || v.vid || `${habitId}_v1`),
+        habit_id:   habitUuid,
         user_id:    uid,
         name:       v.name,
         icon:       v.icon,
@@ -67,9 +108,12 @@ const SDB = {
   async deleteHabit(habitId) {
     const uid = getCurrentUserId();
     if (!uid) return;
-    // Soft delete — just mark inactive
+
+    const habitUuid = toUUID(habitId);
+
+    // Soft delete — mark inactive
     await safeUpsert('habits', {
-      id: habitId,
+      id: habitUuid,
       user_id: uid,
       is_active: false,
       updated_at: new Date().toISOString(),
@@ -80,6 +124,8 @@ const SDB = {
   async setHabitEntry(habitId, dateStr, statusCode, extra = {}) {
     const uid = getCurrentUserId();
     if (!uid) return;
+
+    const habitUuid = toUUID(habitId);
 
     // Map short code → full status
     const statusMap = {
@@ -96,11 +142,11 @@ const SDB = {
     const meta = S.completionMeta?.[metaKey];
 
     const row = {
-      habit_id:          habitId,
+      habit_id:          habitUuid,
       user_id:           uid,
       date:              dateStr,
       status,
-      version_id:        meta?.vid || extra.versionId || null,
+      version_id:        meta?.vid ? toUUID(meta.vid) : null,
       snapshot_name:     meta?.snap?.name     || extra.name    || null,
       snapshot_target:   meta?.snap?.target   || extra.target  || null,
       snapshot_icon:     meta?.snap?.icon     || extra.icon    || null,
@@ -124,7 +170,7 @@ const SDB = {
     if (!uid) return;
     const statusMap = { 'dn':'completed','dn_late':'completed_late','ms':'missed','pt':'partial','':'pending' };
     const rows = entries.map(e => ({
-      habit_id: e.habitId,
+      habit_id: toUUID(e.habitId),
       user_id:  uid,
       date:     e.date,
       status:   statusMap[e.status] || 'pending',
@@ -148,7 +194,7 @@ const SDB = {
     if (!uid) return;
 
     const row = {
-      id:            task.id,
+      id:            toUUID(task.id),
       user_id:       uid,
       title:         task.title,
       description:   task.description || null,
@@ -174,7 +220,7 @@ const SDB = {
   async deleteTask(taskId) {
     const uid = getCurrentUserId();
     if (!uid) return;
-    const { error } = await safeDelete('tasks', taskId, uid);
+    const { error } = await safeDelete('tasks', toUUID(taskId), uid);
     if (error) console.error('[SDB] deleteTask error:', error);
   },
 
@@ -184,7 +230,7 @@ const SDB = {
     if (!uid) return;
 
     const row = {
-      id:         goal.id,
+      id:         toUUID(goal.id),
       user_id:    uid,
       title:      goal.title,
       icon:       goal.icon || '🎯',
@@ -203,7 +249,7 @@ const SDB = {
   async deleteGoal(goalId) {
     const uid = getCurrentUserId();
     if (!uid) return;
-    const { error } = await safeDelete('goals', goalId, uid);
+    const { error } = await safeDelete('goals', toUUID(goalId), uid);
     if (error) console.error('[SDB] deleteGoal error:', error);
   },
 
@@ -212,10 +258,9 @@ const SDB = {
     const uid = getCurrentUserId();
     if (!uid) return;
 
-    // Convert legacy habit IDs to UUIDs where possible
     const habitUUIDs = (entry.habits || []).map(hid => {
       const h = S.habits.find(x => x.id === hid || x._legacyId === hid);
-      return h?.id || hid;
+      return toUUID(h?.id || hid);
     }).filter(Boolean);
 
     const row = {
@@ -256,7 +301,7 @@ const SDB = {
     if (!uid) return;
 
     const row = {
-      id:         area.id,
+      id:         toUUID(area.id),
       user_id:    uid,
       name:       area.name,
       icon:       area.icon,
@@ -279,7 +324,7 @@ const SDB = {
   async deleteLifeArea(areaId) {
     const uid = getCurrentUserId();
     if (!uid) return;
-    const { error } = await safeDelete('life_areas', areaId, uid);
+    const { error } = await safeDelete('life_areas', toUUID(areaId), uid);
     if (error) console.error('[SDB] deleteLifeArea error:', error);
   },
 
@@ -289,7 +334,7 @@ const SDB = {
     if (!uid) return;
 
     const row = {
-      id:             ch.id,
+      id:             toUUID(ch.id),
       user_id:        uid,
       title:          ch.title,
       icon:           ch.icon || '🏆',
@@ -309,7 +354,7 @@ const SDB = {
   async deleteChallenge(challengeId) {
     const uid = getCurrentUserId();
     if (!uid) return;
-    const { error } = await safeDelete('challenges', challengeId, uid);
+    const { error } = await safeDelete('challenges', toUUID(challengeId), uid);
     if (error) console.error('[SDB] deleteChallenge error:', error);
   },
 
@@ -319,7 +364,7 @@ const SDB = {
     if (!uid) return;
 
     const row = {
-      id:               session.id,
+      id:               toUUID(session.id),
       user_id:          uid,
       date:             session.date,
       start_time:       session.startTime,
@@ -408,15 +453,60 @@ const SDB = {
     const uid = getCurrentUserId();
     if (!uid || !window.MomentumOnline) return;
 
-    // Debounce — don't sync more than once per 2 seconds
+    if (!data) data = window.S;
+    if (!data) return;
+
+    // Debounce — sync every 1 second when active
     if (this._syncDebounce) clearTimeout(this._syncDebounce);
     this._syncDebounce = setTimeout(async () => {
       try {
         await this.saveSettings();
+
+        if (data.habits?.length) {
+          for (const h of data.habits) {
+            await this.saveHabit(h);
+          }
+        }
+
+        if (data.tasks?.length) {
+          for (const t of data.tasks) {
+            await this.saveTask(t);
+          }
+        }
+
+        if (data.goals?.length) {
+          for (const g of data.goals) {
+            await this.saveGoal(g);
+          }
+        }
+
+        if (data.journal?.length) {
+          for (const j of data.journal) {
+            await this.saveJournalEntry(j);
+          }
+        }
+
+        if (data.reflections) {
+          for (const [dateStr, ref] of Object.entries(data.reflections)) {
+            await this.saveReflection(dateStr, ref);
+          }
+        }
+
+        if (data.challenges?.length) {
+          for (const ch of data.challenges) {
+            await this.saveChallenge(ch);
+          }
+        }
+
+        if (data.lifeAreas?.length) {
+          for (const la of data.lifeAreas) {
+            await this.saveLifeArea(la);
+          }
+        }
       } catch (e) {
-        console.warn('[SDB] syncAll settings error:', e);
+        console.warn('[SDB] syncAll error:', e);
       }
-    }, 2000);
+    }, 1000);
   },
 
   _syncDebounce: null,

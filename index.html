@@ -3546,9 +3546,12 @@
       const icon = document.querySelector('#h-icons .ib.sel')?.textContent || ICONS[0];
       const color = document.querySelector('#h-colors .sw.sel')?.dataset.c || COLS[7];
       const data = { name, icon, color, category: document.getElementById('h-cat').value, freq: document.getElementById('h-freq').value, reminder: document.getElementById('h-rem').value, note: document.getElementById('h-note').value.trim() };
-      if (eid) { const i = S.habits.findIndex(h => h.id === eid); if (i >= 0) S.habits[i] = { ...S.habits[i], ...data }; toast(`✅ "${name}" updated!`, 'success'); }
-      else { data.id = 'h_' + Date.now(); data.createdAt = ts(); S.habits.push(data); toast(`🎉 "${name}" created!`, 'success'); }
-      save(); closeHM();
+      let savedHabit = null;
+      if (eid) { const i = S.habits.findIndex(h => h.id === eid); if (i >= 0) { S.habits[i] = { ...S.habits[i], ...data }; savedHabit = S.habits[i]; } toast(`✅ "${name}" updated!`, 'success'); }
+      else { data.id = 'h_' + Date.now(); data.createdAt = ts(); S.habits.push(data); savedHabit = data; toast(`🎉 "${name}" created!`, 'success'); }
+      save();
+      if (savedHabit && typeof SDB !== 'undefined') { SDB.saveHabit(savedHabit).catch(e => console.warn(e)); }
+      closeHM();
       if (curPage === 'habits') renderHabits('all');
       if (curPage === 'dashboard') rDash();
       if (curPage === 'matrix') rMatrix();
@@ -3568,7 +3571,16 @@
       document.getElementById('conf-title').textContent = 'Delete Habit';
       document.getElementById('conf-msg').innerHTML = `Delete <strong>"${h?.name}"</strong>? All tracking data will be lost.`;
       document.getElementById('conf-ok').textContent = 'Delete';
-      document.getElementById('conf-ok').onclick = () => { S.habits = S.habits.filter(x => x.id !== hid); save(); closeConf(); toast(`🗑️ "${h?.name}" deleted`, 'info'); if (curPage === 'habits') renderHabits('all'); if (curPage === 'dashboard') rDash(); if (curPage === 'matrix') rMatrix(); };
+      document.getElementById('conf-ok').onclick = () => {
+        S.habits = S.habits.filter(x => x.id !== hid);
+        save();
+        if (typeof SDB !== 'undefined') { SDB.deleteHabit(hid).catch(e => console.warn(e)); }
+        closeConf();
+        toast(`🗑️ "${h?.name}" deleted`, 'info');
+        if (curPage === 'habits') renderHabits('all');
+        if (curPage === 'dashboard') rDash();
+        if (curPage === 'matrix') rMatrix();
+      };
       document.getElementById('m-confirm').classList.remove('hid');
     }
     function closeConf() { document.getElementById('m-confirm').classList.add('hid'); }
@@ -3762,14 +3774,17 @@
       const exG = eid ? S.goals.find(g => g.id === eid) : null;
       const milestones = msTexts.map(t => { const ex = exG?.milestones.find(m => m.text === t); return ex || { text: t, done: false }; });
       const data = { title, icon, color, deadline: document.getElementById('g-dl').value || ts(), progress: parseInt(document.getElementById('g-prog').value) || 0, milestones };
-      if (eid) { const i = S.goals.findIndex(g => g.id === eid); if (i >= 0) S.goals[i] = { ...S.goals[i], ...data }; toast('✅ Goal updated!', 'success'); }
-      else { data.id = 'g_' + Date.now(); S.goals.push(data); toast('🎯 Goal created!', 'success'); }
-      save(); closeGM(); rGoals();
+      let savedGoal = null;
+      if (eid) { const i = S.goals.findIndex(g => g.id === eid); if (i >= 0) { S.goals[i] = { ...S.goals[i], ...data }; savedGoal = S.goals[i]; } toast('✅ Goal updated!', 'success'); }
+      else { data.id = 'g_' + Date.now(); S.goals.push(data); savedGoal = data; toast('🎯 Goal created!', 'success'); }
+      save();
+      if (savedGoal && typeof SDB !== 'undefined') { SDB.saveGoal(savedGoal).catch(e => console.warn(e)); }
+      closeGM(); rGoals();
     }
 
-    function togML(gid, idx) { const g = S.goals.find(x => x.id === gid); if (!g) return; g.milestones[idx].done = !g.milestones[idx].done; const dn = g.milestones.filter(m => m.done).length; g.progress = Math.round((dn / g.milestones.length) * 100); save(); rGoals(); toast(g.milestones[idx].done ? '✅ Milestone done!' : '↩️ Reset', 'success'); }
-    function updGP(gid) { const g = S.goals.find(x => x.id === gid); if (!g) return; const p = prompt(`Progress for "${g.title}" (0-100):`, g.progress); if (p === null) return; g.progress = Math.min(100, Math.max(0, parseInt(p) || 0)); save(); rGoals(); toast(`📊 ${g.progress}%`, 'success'); }
-    function delGoal(gid) { const g = S.goals.find(x => x.id === gid); document.getElementById('conf-icon').textContent = g?.icon || '🗑️'; document.getElementById('conf-title').textContent = 'Delete Goal'; document.getElementById('conf-msg').innerHTML = `Delete <strong>"${g?.title}"</strong>?`; document.getElementById('conf-ok').textContent = 'Delete'; document.getElementById('conf-ok').onclick = () => { S.goals = S.goals.filter(x => x.id !== gid); save(); closeConf(); rGoals(); toast('🗑️ Deleted', 'info'); }; document.getElementById('m-confirm').classList.remove('hid'); }
+    function togML(gid, idx) { const g = S.goals.find(x => x.id === gid); if (!g) return; g.milestones[idx].done = !g.milestones[idx].done; const dn = g.milestones.filter(m => m.done).length; g.progress = Math.round((dn / g.milestones.length) * 100); save(); if (typeof SDB !== 'undefined') { SDB.saveGoal(g).catch(e => console.warn(e)); } rGoals(); toast(g.milestones[idx].done ? '✅ Milestone done!' : '↩️ Reset', 'success'); }
+    function updGP(gid) { const g = S.goals.find(x => x.id === gid); if (!g) return; const p = prompt(`Progress for "${g.title}" (0-100):`, g.progress); if (p === null) return; g.progress = Math.min(100, Math.max(0, parseInt(p) || 0)); save(); if (typeof SDB !== 'undefined') { SDB.saveGoal(g).catch(e => console.warn(e)); } rGoals(); toast(`📊 ${g.progress}%`, 'success'); }
+    function delGoal(gid) { const g = S.goals.find(x => x.id === gid); document.getElementById('conf-icon').textContent = g?.icon || '🗑️'; document.getElementById('conf-title').textContent = 'Delete Goal'; document.getElementById('conf-msg').innerHTML = `Delete <strong>"${g?.title}"</strong>?`; document.getElementById('conf-ok').textContent = 'Delete'; document.getElementById('conf-ok').onclick = () => { S.goals = S.goals.filter(x => x.id !== gid); save(); if (typeof SDB !== 'undefined') { SDB.deleteGoal(gid).catch(e => console.warn(e)); } closeConf(); rGoals(); toast('🗑️ Deleted', 'info'); }; document.getElementById('m-confirm').classList.remove('hid'); }
 
     // ── JOURNAL ──
     function rJournal() {
@@ -3784,7 +3799,9 @@
       const note = document.getElementById('j-note').value.trim(); const t = ts();
       const entry = { id: 'j_' + Date.now(), date: t, mood: selMoodVal, note };
       const i = S.journal.findIndex(j => j.date === t); if (i >= 0) S.journal[i] = { ...S.journal[i], ...entry }; else S.journal.unshift(entry);
-      save(); toast('📔 Journal saved!', 'success'); rJEntries(); rMiniCal();
+      save();
+      if (typeof SDB !== 'undefined') { SDB.saveJournalEntry(entry).catch(e => console.warn(e)); }
+      toast('📔 Journal saved!', 'success'); rJEntries(); rMiniCal();
     }
     function rJEntries() {
       const entries = [...S.journal].sort((a, b) => b.date.localeCompare(a.date)); const el = document.getElementById('j-entries');

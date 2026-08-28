@@ -493,6 +493,10 @@ function saveTask() {
   }
 
   save();
+  if (typeof SDB !== 'undefined') {
+    const targetTask = eid ? S.tasks.find(t => t.id === eid) : S.tasks[S.tasks.length - 1];
+    if (targetTask) SDB.saveTask(targetTask).catch(e => console.warn(e));
+  }
   closeTaskModal();
 
   // Refresh planner or dashboard if visible
@@ -518,6 +522,7 @@ function plannerToggleTask(taskId, dateStr) {
     toast(`✅ "${task.title}" done!`, 'success');
   }
   save();
+  if (typeof SDB !== 'undefined') { SDB.saveTask(task).catch(e => console.warn(e)); }
 
   // Fast DOM update — no full re-render needed
   const item = document.getElementById(`task-item-${taskId}`);
@@ -553,6 +558,7 @@ function plannerDeleteTask(taskId, dateStr) {
   document.getElementById('conf-ok').onclick = () => {
     S.tasks = S.tasks.filter(t => t.id !== taskId);
     save();
+    if (typeof SDB !== 'undefined') { SDB.deleteTask(taskId).catch(e => console.warn(e)); }
     closeConf();
     toast(`🗑️ Task deleted`, 'info');
     PlannerPage.render();

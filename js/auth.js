@@ -68,27 +68,42 @@ async function _loadUserData(user) {
       _supabase.from('notifications').select('*').eq('user_id', user.id).order('timestamp', { ascending: false }).limit(50),
     ]);
 
-    // Map to S object
-    _mapSupabaseToS({
-      profile:        profileRes.data,
-      habits:         habitsRes.data || [],
-      habitVersions:  habitVersionsRes.data || [],
-      habitEntries:   habitEntriesRes.data || [],
-      tasks:          tasksRes.data || [],
-      goals:          goalsRes.data || [],
-      journal:        journalRes.data || [],
-      reflections:    reflectionsRes.data || [],
-      lifeAreas:      lifeAreasRes.data || [],
-      challenges:     challengesRes.data || [],
-      focusSessions:  focusSessionsRes.data || [],
-      settings:       settingsRes.data,
-      notifications:  notificationsRes.data || [],
-    });
+    const hasCloudData = (habitsRes.data && habitsRes.data.length > 0) ||
+                         (tasksRes.data && tasksRes.data.length > 0) ||
+                         (goalsRes.data && goalsRes.data.length > 0) ||
+                         (journalRes.data && journalRes.data.length > 0) ||
+                         (challengesRes.data && challengesRes.data.length > 0);
+
+    if (hasCloudData) {
+      // Map Supabase rows to S object
+      _mapSupabaseToS({
+        profile:        profileRes.data,
+        habits:         habitsRes.data || [],
+        habitVersions:  habitVersionsRes.data || [],
+        habitEntries:   habitEntriesRes.data || [],
+        tasks:          tasksRes.data || [],
+        goals:          goalsRes.data || [],
+        journal:        journalRes.data || [],
+        reflections:    reflectionsRes.data || [],
+        lifeAreas:      lifeAreasRes.data || [],
+        challenges:     challengesRes.data || [],
+        focusSessions:  focusSessionsRes.data || [],
+        settings:       settingsRes.data,
+        notifications:  notificationsRes.data || [],
+      });
+    } else {
+      // Cloud database is empty for this user.
+      // If local S has data, push local data to cloud!
+      console.log('[Auth] Supabase tables empty — pushing local data to cloud...');
+      if (typeof SDB !== 'undefined') {
+        await SDB.syncAll(S);
+      }
+    }
 
     window.momentumProfile = profileRes.data;
     console.log('[Auth] User data loaded:', S.habits.length, 'habits,', S.tasks.length, 'tasks');
 
-    // Also save to localStorage as cache
+    // Save to localStorage as cache
     try { localStorage.setItem('mo_v3', JSON.stringify(S)); } catch(e) {}
 
     // Start Realtime subscriptions
@@ -134,177 +149,196 @@ function _mapSupabaseToS(data) {
   }
 
   // ── Life Areas ──
-  S.lifeAreas = lifeAreas.map(la => ({
-    id:       la.id,
-    name:     la.name,
-    icon:     la.icon,
-    color:    la.color,
-    archived: la.archived,
-    order:    la.sort_order,
-    _dbId:    la.id,
-  }));
+  if (lifeAreas && lifeAreas.length > 0) {
+    S.lifeAreas = lifeAreas.map(la => ({
+      id:       la.legacy_id || la.id,
+      name:     la.name,
+      icon:     la.icon,
+      color:    la.color,
+      archived: la.archived,
+      order:    la.sort_order,
+      _dbId:    la.id,
+    }));
+  }
 
   // ── Habits (with versions embedded) ──
-  S.habits = habits.map(h => {
-    const versions = habitVersions
-      .filter(v => v.habit_id === h.id)
-      .sort((a, b) => a.start_date.localeCompare(b.start_date))
-      .map(v => ({
-        vid:       v.id,
-        name:      v.name,
-        icon:      v.icon,
-        color:     v.color,
-        category:  v.category,
-        freq:      v.frequency,
-        reminder:  v.reminder,
-        note:      v.note,
-        target:    v.target,
-        startDate: v.start_date,
-        endDate:   v.end_date || null,
-        _dbId:     v.id,
-      }));
+  if (habits && habits.length > 0) {
+    S.habits = habits.map(h => {
+      const versions = habitVersions
+        .filter(v => v.habit_id === h.id)
+        .sort((a, b) => a.start_date.localeCompare(b.start_date))
+        .map(v => ({
+          vid:       v.legacy_vid || v.id,
+          name:      v.name,
+          icon:      v.icon,
+          color:     v.color,
+          category:  v.category,
+          freq:      v.frequency,
+          reminder:  v.reminder,
+          note:      v.note,
+          target:    v.target,
+          startDate: v.start_date,
+          endDate:   v.end_date || null,
+          _dbId:     v.id,
+        }));
 
-    const activeVer = versions.find(v => !v.endDate) || versions[versions.length - 1] || {};
+      const activeVer = versions.find(v => !v.endDate) || versions[versions.length - 1] || {};
 
-    return {
-      id:          h.id,
-      name:        activeVer.name  || h.name,
-      icon:        activeVer.icon  || h.icon,
-      color:       activeVer.color || h.color,
-      category:    activeVer.category || h.category,
-      freq:        activeVer.freq  || h.frequency,
-      reminder:    activeVer.reminder || h.reminder_time,
-      note:        activeVer.note  || h.note,
-      active:      h.is_active,
-      createdAt:   h.created_at ? h.created_at.substring(0, 10) : '',
-      versions:    versions,
-      _dbId:       h.id,
-      _legacyId:   h.legacy_id,
-    };
-  });
+      return {
+        id:          h.legacy_id || h.id,
+        name:        activeVer.name  || h.name,
+        icon:        activeVer.icon  || h.icon,
+        color:       activeVer.color || h.color,
+        category:    activeVer.category || h.category,
+        freq:        activeVer.freq  || h.frequency,
+        reminder:    activeVer.reminder || h.reminder_time,
+        note:        activeVer.note  || h.note,
+        active:      h.is_active,
+        createdAt:   h.created_at ? h.created_at.substring(0, 10) : '',
+        versions:    versions,
+        _dbId:       h.id,
+        _legacyId:   h.legacy_id,
+      };
+    });
+  }
 
   // ── Completions (habit_entries → S.completions flat map) ──
-  S.completions = {};
-  S.completionMeta = {};
-  habitEntries.forEach(entry => {
-    const key = `${entry.habit_id}_${entry.date}`;
-    // Map status back to short codes
-    const statusMap = {
-      'completed':       'dn',
-      'completed_late':  'dn_late',
-      'missed':          'ms',
-      'partial':         'pt',
-      'pending':         '',
-    };
-    S.completions[key] = statusMap[entry.status] || '';
+  if (habitEntries && habitEntries.length > 0) {
+    S.completions = {};
+    S.completionMeta = {};
+    habitEntries.forEach(entry => {
+      // Find matching habit in S.habits to use legacy/local ID
+      const matchingHabit = S.habits.find(hb => hb._dbId === entry.habit_id || hb.id === entry.habit_id);
+      const habitId = matchingHabit ? matchingHabit.id : entry.habit_id;
 
-    // Snapshot meta
-    if (entry.status === 'completed' || entry.status === 'completed_late') {
-      S.completionMeta[key] = {
-        vid: entry.version_id,
-        snap: {
-          name:     entry.snapshot_name,
-          icon:     entry.snapshot_icon,
-          color:    entry.snapshot_color,
-          category: entry.snapshot_category,
-          target:   entry.snapshot_target,
-        },
-        _entryId: entry.id,
+      const key = `${habitId}_${entry.date}`;
+      const statusMap = {
+        'completed':       'dn',
+        'completed_late':  'dn_late',
+        'missed':          'ms',
+        'partial':         'pt',
+        'pending':         '',
       };
-    }
+      S.completions[key] = statusMap[entry.status] || '';
 
-    // Miss reasons
-    if (entry.miss_reason) {
-      if (!S.missReasons) S.missReasons = {};
-      S.missReasons[key] = entry.miss_reason;
-    }
-  });
+      // Snapshot meta
+      if (entry.status === 'completed' || entry.status === 'completed_late') {
+        S.completionMeta[key] = {
+          vid: entry.version_id,
+          snap: {
+            name:     entry.snapshot_name,
+            icon:     entry.snapshot_icon,
+            color:    entry.snapshot_color,
+            category: entry.snapshot_category,
+            target:   entry.snapshot_target,
+          },
+          _entryId: entry.id,
+        };
+      }
+
+      // Miss reasons
+      if (entry.miss_reason) {
+        if (!S.missReasons) S.missReasons = {};
+        S.missReasons[key] = entry.miss_reason;
+      }
+    });
+  }
 
   // ── Tasks ──
-  S.tasks = tasks.map(t => ({
-    id:            t.id,
-    title:         t.title,
-    description:   t.description,
-    notes:         t.notes,
-    category:      t.category,
-    priority:      t.priority,
-    color:         t.color,
-    dueDate:       t.due_date,
-    dueTime:       t.due_time,
-    reminderDate:  t.reminder_date,
-    reminderTime:  t.reminder_time,
-    status:        t.status,
-    completedAt:   t.completed_at,
-    delayCount:    t.delay_count,
-    createdAt:     t.created_at ? t.created_at.substring(0, 10) : '',
-    _dbId:         t.id,
-    _legacyId:     t.legacy_id,
-  }));
+  if (tasks && tasks.length > 0) {
+    S.tasks = tasks.map(t => ({
+      id:            t.legacy_id || t.id,
+      title:         t.title,
+      description:   t.description,
+      notes:         t.notes,
+      category:      t.category,
+      priority:      t.priority,
+      color:         t.color,
+      dueDate:       t.due_date,
+      dueTime:       t.due_time,
+      reminderDate:  t.reminder_date,
+      reminderTime:  t.reminder_time,
+      status:        t.status,
+      completedAt:   t.completed_at,
+      delayCount:    t.delay_count,
+      createdAt:     t.created_at ? t.created_at.substring(0, 10) : '',
+      _dbId:         t.id,
+      _legacyId:     t.legacy_id,
+    }));
+  }
 
   // ── Goals ──
-  S.goals = goals.map(g => ({
-    id:          g.id,
-    title:       g.title,
-    icon:        g.icon,
-    color:       g.color,
-    deadline:    g.deadline,
-    progress:    g.progress,
-    milestones:  Array.isArray(g.milestones) ? g.milestones : [],
-    _dbId:       g.id,
-    _legacyId:   g.legacy_id,
-  }));
+  if (goals && goals.length > 0) {
+    S.goals = goals.map(g => ({
+      id:          g.legacy_id || g.id,
+      title:       g.title,
+      icon:        g.icon,
+      color:       g.color,
+      deadline:    g.deadline,
+      progress:    g.progress,
+      milestones:  Array.isArray(g.milestones) ? g.milestones : [],
+      _dbId:       g.id,
+      _legacyId:   g.legacy_id,
+    }));
+  }
 
   // ── Journal ──
-  S.journal = journal.map(j => ({
-    id:       j.id,
-    date:     j.date,
-    mood:     j.mood,
-    note:     j.note,
-    habits:   j.habit_ids || [],
-    _dbId:    j.id,
-  }));
+  if (journal && journal.length > 0) {
+    S.journal = journal.map(j => ({
+      id:       j.id,
+      date:     j.date,
+      mood:     j.mood,
+      note:     j.note,
+      habits:   j.legacy_habit_ids || j.habit_ids || [],
+      _dbId:    j.id,
+    }));
+  }
 
   // ── Reflections ──
-  S.reflections = {};
-  reflections.forEach(r => {
-    S.reflections[r.date] = {
-      mood:    r.mood,
-      bigWin:  r.big_win,
-      notes:   r.notes,
-      savedAt: r.saved_at,
-      _dbId:   r.id,
-    };
-  });
-
-  // ── Life Areas (already done above, keep reference) ──
+  if (reflections && reflections.length > 0) {
+    S.reflections = {};
+    reflections.forEach(r => {
+      S.reflections[r.date] = {
+        mood:    r.mood,
+        bigWin:  r.big_win,
+        notes:   r.notes,
+        savedAt: r.saved_at,
+        _dbId:   r.id,
+      };
+    });
+  }
 
   // ── Challenges ──
-  S.challenges = challenges.map(ch => ({
-    id:            ch.id,
-    title:         ch.title,
-    icon:          ch.icon,
-    color:         ch.color,
-    totalDays:     ch.total_days,
-    startDate:     ch.start_date,
-    completedDays: ch.completed_days || [],
-    milestones:    Array.isArray(ch.milestones) ? ch.milestones : [],
-    _dbId:         ch.id,
-    _legacyId:     ch.legacy_id,
-  }));
+  if (challenges && challenges.length > 0) {
+    S.challenges = challenges.map(ch => ({
+      id:            ch.legacy_id || ch.id,
+      title:         ch.title,
+      icon:          ch.icon,
+      color:         ch.color,
+      totalDays:     ch.total_days,
+      startDate:     ch.start_date,
+      completedDays: ch.completed_days || [],
+      milestones:    Array.isArray(ch.milestones) ? ch.milestones : [],
+      _dbId:         ch.id,
+      _legacyId:     ch.legacy_id,
+    }));
+  }
 
   // ── Focus Sessions ──
-  S.focusSessions = focusSessions.map(fs => ({
-    id:        fs.id,
-    date:      fs.date,
-    startTime: fs.start_time,
-    endTime:   fs.end_time,
-    duration:  fs.duration_minutes,
-    mode:      fs.mode,
-    category:  fs.category,
-    status:    fs.status,
-    _dbId:     fs.id,
-    _legacyId: fs.legacy_id,
-  }));
+  if (focusSessions && focusSessions.length > 0) {
+    S.focusSessions = focusSessions.map(fs => ({
+      id:        fs.legacy_id || fs.id,
+      date:      fs.date,
+      startTime: fs.start_time,
+      endTime:   fs.end_time,
+      duration:  fs.duration_minutes,
+      mode:      fs.mode,
+      category:  fs.category,
+      status:    fs.status,
+      _dbId:     fs.id,
+      _legacyId: fs.legacy_id,
+    }));
+  }
 
   // ── Settings ──
   if (settings) {
@@ -353,17 +387,19 @@ function _mapSupabaseToS(data) {
   }
 
   // ── Notifications ──
-  S.notifications = notifications.map(n => ({
-    id:        n.id,
-    title:     n.title,
-    body:      n.body,
-    type:      n.type,
-    timestamp: n.timestamp,
-    read:      n.read,
-    clicked:   n.clicked,
-    relatedId: n.related_id,
-    _dbId:     n.id,
-  }));
+  if (notifications && notifications.length > 0) {
+    S.notifications = notifications.map(n => ({
+      id:        n.id,
+      title:     n.title,
+      body:      n.body,
+      type:      n.type,
+      timestamp: n.timestamp,
+      read:      n.read,
+      clicked:   n.clicked,
+      relatedId: n.related_id,
+      _dbId:     n.id,
+    }));
+  }
 }
 
 // ── Show/hide app vs auth screen ─────────────────────────────────
