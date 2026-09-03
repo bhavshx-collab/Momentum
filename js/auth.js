@@ -93,10 +93,12 @@ async function _loadUserData(user) {
       });
     } else {
       // Cloud database is empty for this user.
-      // If local S has data, push local data to cloud!
-      console.log('[Auth] Supabase tables empty — pushing local data to cloud...');
+      // Push local localStorage data to cloud.
+      console.log('[Auth] Supabase empty — pushing local data to cloud...');
       if (typeof SDB !== 'undefined') {
         await SDB.syncAll(S);
+        // Also sync habit completions (S.completions)
+        await SDB.syncAllCompletions(S);
       }
     }
 
@@ -376,9 +378,15 @@ function _mapSupabaseToS(data) {
       backfillWindow:     settings.backfill_window_hours,
       habitNotifications: settings.habit_notifications,
     };
-    S.productivityScores = settings.productivity_scores || {};
-    S.sentNotifications = settings.sent_notifications || {};
-    S.lastReminderSent = settings.last_reminder_sent || {};
+    S.productivityScores = typeof settings.productivity_scores === 'string'
+      ? ((() => { try { return JSON.parse(settings.productivity_scores); } catch { return {}; } })()
+      ) : (settings.productivity_scores || {});
+    S.sentNotifications = typeof settings.sent_notifications === 'string'
+      ? ((() => { try { return JSON.parse(settings.sent_notifications); } catch { return {}; } })()
+      ) : (settings.sent_notifications || {});
+    S.lastReminderSent = typeof settings.last_reminder_sent === 'string'
+      ? ((() => { try { return JSON.parse(settings.last_reminder_sent); } catch { return {}; } })()
+      ) : (settings.last_reminder_sent || {});
     S.settings = {
       reminders: settings.notifications_enabled,
       streaks:   settings.streaks_notifications,

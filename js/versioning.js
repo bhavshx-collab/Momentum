@@ -277,6 +277,11 @@ function saveHabitVersioned() {
   }
 
   save();
+  // Sync the saved/updated habit to Supabase
+  if (typeof SDB !== 'undefined' && window.momentumUser) {
+    const savedHabit = S.habits.find(h => h.id === (eid || S.habits[S.habits.length - 1]?.id));
+    if (savedHabit) SDB.saveHabit(savedHabit).catch(e => console.warn('[versioning] saveHabit Supabase error:', e));
+  }
   closeHM();
   if (curPage === 'habits')    renderHabits('all');
   if (curPage === 'dashboard') rDash();
@@ -805,7 +810,20 @@ function saveAuditChange() {
   const comment = document.getElementById('audit-comment').value.trim();
 
   const oldVal = gc(hid, ds);
-  sc(hid, ds, val);
+  // Update local state without Supabase (we sync after snapshot)
+  sc(hid, ds, val, true);
+
+  // Record/remove snapshot for this entry
+  if (val === 'dn' || val === 'dn_late') {
+    if (typeof recordCompletionSnapshot === 'function') recordCompletionSnapshot(hid, ds);
+  } else {
+    if (typeof removeCompletionSnapshot === 'function') removeCompletionSnapshot(hid, ds);
+  }
+
+  // Sync to Supabase with snapshot ready
+  if (window.momentumUser && typeof SDB !== 'undefined') {
+    SDB.setHabitEntry(hid, ds, val).catch(e => console.warn('[audit] Supabase sync error:', e));
+  }
   
   // Record audit log entry
   const hb = S.habits.find(x => x.id === hid);

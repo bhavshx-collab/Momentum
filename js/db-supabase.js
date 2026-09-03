@@ -1,31 +1,37 @@
 /**
  * db-supabase.js — Supabase data access layer
  *
- * Replaces localStorage persistence with Supabase while keeping
- * the same S object in memory as the local working state.
  * All writes go to BOTH localStorage (cache) AND Supabase (source of truth).
+ * Habit entries (completions) are synced immediately on every mark/unmark.
  */
 
-// ── UUID Conversion Helper ─────────────────────────────────────────
-// PostgreSQL UUID columns require valid UUID strings (8-4-4-4-12 hex).
-// Converts legacy string IDs like 'h_1724856123456' to valid UUIDs.
+// ── UUID Conversion Helper ──────────────────────────────────────────
+// Converts any string ID (e.g. 'h_1724856123456') to a valid UUID v4 string.
+// Uses a deterministic algorithm so the same input always produces the same UUID.
 function toUUID(str) {
-  if (!str) return (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : '00000000-0000-4000-a000-000000000000';
-  if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str)) {
-    return str;
+  if (!str) {
+    return (typeof crypto !== 'undefined' && crypto.randomUUID)
+      ? crypto.randomUUID()
+      : '00000000-0000-4000-a000-000000000000';
   }
+  // Already a valid UUID — return as-is
+  if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str)) {
+    return str.toLowerCase();
+  }
+  // Convert string to hex and pad to 32 chars
   let hex = '';
   for (let i = 0; i < str.length; i++) {
-    hex += str.charCodeAt(i).toString(16);
+    hex += str.charCodeAt(i).toString(16).padStart(2, '0');
   }
   hex = (hex + '00000000000000000000000000000000').substring(0, 32);
+  // Format as UUID (version 4 style — force version/variant bits)
   return `${hex.substring(0,8)}-${hex.substring(8,12)}-4${hex.substring(13,16)}-a${hex.substring(17,20)}-${hex.substring(20,32)}`;
 }
 window.toUUID = toUUID;
 
 const SDB = {
 
-  // ── HABITS ─────────────────────────────────────────────────────
+  // ── HABITS ───────────────────────────────────────────────────────
   async saveHabit(habit) {
     const uid = getCurrentUserId();
     if (!uid) return;
@@ -35,10 +41,10 @@ const SDB = {
     const row = {
       id:            habitUuid,
       user_id:       uid,
-      name:          habit.name,
+      name:          habit.name || 'Untitled',
       category:      habit.category || 'General',
       frequency:     habit.freq || habit.frequency || 'daily',
-      target:        habit.versions?.find(v => !v.endDate)?.target || habit.target || '',
+      target:        habit.versions?.find(v => !v.endDate)?.target || habit.target || null,
       icon:          habit.icon || '💪',
       color:         habit.color || '#8b5cf6',
       reminder_time: habit.reminder || null,
@@ -49,20 +55,23 @@ const SDB = {
     };
 
     const { error } = await safeUpsert('habits', row, 'id');
-    if (error) console.error('[SDB] saveHabit error:', error);
+    if (error) {
+      console.error('[SDB] saveHabit error:', error);
+      return;
+    }
 
-    // Save versions too
+    // Save versions
     if (habit.versions?.length) {
       await this.saveHabitVersions(habitUuid, habit.versions, uid);
     } else {
-      // Ensure at least one initial version exists
+      // Create an initial default version
       const versionUuid = toUUID(`${habit.id}_v1`);
       await safeUpsert('habit_versions', {
         id:          versionUuid,
         habit_id:    habitUuid,
         user_id:     uid,
         version_num: 1,
-        name:        habit.name,
+        name:        habit.name || 'Untitled',
         icon:        habit.icon || '💪',
         color:       habit.color || '#8b5cf6',
         category:    habit.category || 'General',
@@ -84,21 +93,22 @@ const SDB = {
     const habitUuid = toUUID(habitId);
 
     for (const v of versions) {
+      const vId = v._dbId || v.vid || `${habitId}_v1`;
       const row = {
-        id:         toUUID(v._dbId || v.vid || `${habitId}_v1`),
+        id:         toUUID(vId),
         habit_id:   habitUuid,
         user_id:    uid,
-        name:       v.name,
-        icon:       v.icon,
-        color:      v.color,
-        category:   v.category,
+        name:       v.name || 'Untitled',
+        icon:       v.icon || '💪',
+        color:      v.color || '#8b5cf6',
+        category:   v.category || 'General',
         frequency:  v.freq || 'daily',
         reminder:   v.reminder || null,
         note:       v.note || null,
         target:     v.target || null,
-        start_date: v.startDate,
+        start_date: v.startDate || new Date().toISOString().substring(0, 10),
         end_date:   v.endDate || null,
-        legacy_vid: v.vid,
+        legacy_vid: v.vid || null,
       };
       const { error } = await safeUpsert('habit_versions', row, 'id');
       if (error) console.error('[SDB] saveHabitVersion error:', error);
@@ -110,24 +120,32 @@ const SDB = {
     if (!uid) return;
 
     const habitUuid = toUUID(habitId);
-
     // Soft delete — mark inactive
-    await safeUpsert('habits', {
-      id: habitUuid,
-      user_id: uid,
-      is_active: false,
+    const { error } = await safeUpsert('habits', {
+      id:         habitUuid,
+      user_id:    uid,
+      is_active:  false,
       updated_at: new Date().toISOString(),
     }, 'id');
+    if (error) console.error('[SDB] deleteHabit error:', error);
   },
 
-  // ── HABIT ENTRIES (completions) ────────────────────────────────
+  // ── HABIT ENTRIES (completions) ───────────────────────────────────
+  /**
+   * Primary function called when a habit is marked/unmarked.
+   * @param {string} habitId  — local habit ID (e.g. 'h_1234')
+   * @param {string} dateStr  — 'YYYY-MM-DD'
+   * @param {string} statusCode — 'dn' | 'dn_late' | 'ms' | 'pt' | ''
+   * @param {object} extra    — optional snapshot overrides
+   */
   async setHabitEntry(habitId, dateStr, statusCode, extra = {}) {
     const uid = getCurrentUserId();
     if (!uid) return;
 
+    // Map local habit ID → UUID (same algorithm used when saving habits)
     const habitUuid = toUUID(habitId);
 
-    // Map short code → full status
+    // Status code → Supabase enum value
     const statusMap = {
       'dn':      'completed',
       'dn_late': 'completed_late',
@@ -137,58 +155,73 @@ const SDB = {
     };
     const status = statusMap[statusCode] ?? 'pending';
 
-    // Build snapshot from completionMeta
+    // Pull snapshot from completionMeta (populated by versioning.js)
     const metaKey = `${habitId}_${dateStr}`;
-    const meta = S.completionMeta?.[metaKey];
+    const meta = (typeof S !== 'undefined' && S.completionMeta)?.[metaKey];
 
+    // Build the row — use upsert on (habit_id, user_id, date) unique constraint
     const row = {
       habit_id:          habitUuid,
       user_id:           uid,
       date:              dateStr,
-      status,
-      version_id:        meta?.vid ? toUUID(meta.vid) : null,
-      snapshot_name:     meta?.snap?.name     || extra.name    || null,
-      snapshot_target:   meta?.snap?.target   || extra.target  || null,
-      snapshot_icon:     meta?.snap?.icon     || extra.icon    || null,
-      snapshot_color:    meta?.snap?.color    || extra.color   || null,
+      status:            status,
+      version_id:        (meta?.vid && meta.vid !== habitId) ? toUUID(meta.vid) : null,
+      snapshot_name:     meta?.snap?.name     || extra.name     || null,
+      snapshot_target:   meta?.snap?.target   || extra.target   || null,
+      snapshot_icon:     meta?.snap?.icon     || extra.icon     || null,
+      snapshot_color:    meta?.snap?.color    || extra.color    || null,
       snapshot_category: meta?.snap?.category || extra.category || null,
       late_completion:   status === 'completed_late',
       completed_at:      (status === 'completed' || status === 'completed_late')
                            ? new Date().toISOString() : null,
       logged_at:         new Date().toISOString(),
-      miss_reason:       S.missReasons?.[metaKey] || extra.missReason || null,
+      miss_reason:       (typeof S !== 'undefined' && S.missReasons)?.[metaKey] || extra.missReason || null,
       updated_at:        new Date().toISOString(),
     };
 
-    // Use conflict on (habit_id, user_id, date)
-    const { error } = await safeUpsert('habit_entries', row, 'habit_id,user_id,date');
-    if (error) console.error('[SDB] setHabitEntry error:', error);
+    // Supabase upsert with composite unique key constraint
+    try {
+      const result = await _supabase
+        .from('habit_entries')
+        .upsert(row, { onConflict: 'habit_id,user_id,date', ignoreDuplicates: false });
+
+      if (result.error) {
+        console.error('[SDB] setHabitEntry error:', result.error);
+        // Fall back to offline queue
+        enqueueOfflineChange({ type: 'upsert', table: 'habit_entries', data: row, conflict: 'habit_id,user_id,date' });
+      }
+    } catch (err) {
+      console.error('[SDB] setHabitEntry exception:', err);
+      enqueueOfflineChange({ type: 'upsert', table: 'habit_entries', data: row, conflict: 'habit_id,user_id,date' });
+    }
   },
 
   async bulkSetHabitEntries(entries) {
     const uid = getCurrentUserId();
     if (!uid) return;
-    const statusMap = { 'dn':'completed','dn_late':'completed_late','ms':'missed','pt':'partial','':'pending' };
+    const statusMap = { 'dn': 'completed', 'dn_late': 'completed_late', 'ms': 'missed', 'pt': 'partial', '': 'pending' };
     const rows = entries.map(e => ({
-      habit_id: toUUID(e.habitId),
-      user_id:  uid,
-      date:     e.date,
-      status:   statusMap[e.status] || 'pending',
-      snapshot_name:     e.snap?.name,
-      snapshot_target:   e.snap?.target,
-      snapshot_icon:     e.snap?.icon,
-      snapshot_color:    e.snap?.color,
-      snapshot_category: e.snap?.category,
-      miss_reason:       e.missReason,
+      habit_id:          toUUID(e.habitId),
+      user_id:           uid,
+      date:              e.date,
+      status:            statusMap[e.status] || 'pending',
+      snapshot_name:     e.snap?.name     || null,
+      snapshot_target:   e.snap?.target   || null,
+      snapshot_icon:     e.snap?.icon     || null,
+      snapshot_color:    e.snap?.color    || null,
+      snapshot_category: e.snap?.category || null,
+      miss_reason:       e.missReason     || null,
       late_completion:   e.status === 'dn_late',
       updated_at:        new Date().toISOString(),
     }));
     if (!rows.length) return;
-    const { error } = await safeUpsert('habit_entries', rows, 'habit_id,user_id,date');
+    const { error } = await _supabase
+      .from('habit_entries')
+      .upsert(rows, { onConflict: 'habit_id,user_id,date', ignoreDuplicates: false });
     if (error) console.error('[SDB] bulkSetHabitEntries error:', error);
   },
 
-  // ── TASKS ─────────────────────────────────────────────────────
+  // ── TASKS ────────────────────────────────────────────────────────
   async saveTask(task) {
     const uid = getCurrentUserId();
     if (!uid) return;
@@ -196,7 +229,7 @@ const SDB = {
     const row = {
       id:            toUUID(task.id),
       user_id:       uid,
-      title:         task.title,
+      title:         task.title || 'Untitled',
       description:   task.description || null,
       notes:         task.notes || null,
       category:      task.category || 'Other',
@@ -224,20 +257,26 @@ const SDB = {
     if (error) console.error('[SDB] deleteTask error:', error);
   },
 
-  // ── GOALS ─────────────────────────────────────────────────────
+  // ── GOALS ────────────────────────────────────────────────────────
   async saveGoal(goal) {
     const uid = getCurrentUserId();
     if (!uid) return;
 
+    // milestones must be a JSON object (JSONB), not a string
+    let milestones = goal.milestones || [];
+    if (typeof milestones === 'string') {
+      try { milestones = JSON.parse(milestones); } catch { milestones = []; }
+    }
+
     const row = {
       id:         toUUID(goal.id),
       user_id:    uid,
-      title:      goal.title,
+      title:      goal.title || 'Untitled',
       icon:       goal.icon || '🎯',
       color:      goal.color || '#8b5cf6',
       deadline:   goal.deadline || null,
-      progress:   goal.progress || 0,
-      milestones: JSON.stringify(goal.milestones || []),
+      progress:   Math.min(100, Math.max(0, goal.progress || 0)),
+      milestones: milestones,   // JSONB — pass as object, not string
       legacy_id:  goal._legacyId || goal.id,
       updated_at: new Date().toISOString(),
     };
@@ -253,31 +292,31 @@ const SDB = {
     if (error) console.error('[SDB] deleteGoal error:', error);
   },
 
-  // ── JOURNAL ───────────────────────────────────────────────────
+  // ── JOURNAL ──────────────────────────────────────────────────────
   async saveJournalEntry(entry) {
     const uid = getCurrentUserId();
     if (!uid) return;
 
     const habitUUIDs = (entry.habits || []).map(hid => {
-      const h = S.habits.find(x => x.id === hid || x._legacyId === hid);
+      const h = (typeof S !== 'undefined') && S.habits.find(x => x.id === hid || x._legacyId === hid);
       return toUUID(h?.id || hid);
     }).filter(Boolean);
 
     const row = {
-      user_id:   uid,
-      date:      entry.date,
-      mood:      entry.mood || null,
-      note:      entry.note || null,
-      habit_ids: habitUUIDs,
+      user_id:          uid,
+      date:             entry.date,
+      mood:             entry.mood || null,
+      note:             entry.note || null,
+      habit_ids:        habitUUIDs,
       legacy_habit_ids: entry.habits || [],
-      updated_at: new Date().toISOString(),
+      updated_at:       new Date().toISOString(),
     };
 
     const { error } = await safeUpsert('journal_entries', row, 'user_id,date');
     if (error) console.error('[SDB] saveJournalEntry error:', error);
   },
 
-  // ── REFLECTIONS ───────────────────────────────────────────────
+  // ── REFLECTIONS ──────────────────────────────────────────────────
   async saveReflection(dateStr, reflection) {
     const uid = getCurrentUserId();
     if (!uid) return;
@@ -295,7 +334,7 @@ const SDB = {
     if (error) console.error('[SDB] saveReflection error:', error);
   },
 
-  // ── LIFE AREAS ────────────────────────────────────────────────
+  // ── LIFE AREAS ───────────────────────────────────────────────────
   async saveLifeArea(area) {
     const uid = getCurrentUserId();
     if (!uid) return;
@@ -303,9 +342,9 @@ const SDB = {
     const row = {
       id:         toUUID(area.id),
       user_id:    uid,
-      name:       area.name,
-      icon:       area.icon,
-      color:      area.color,
+      name:       area.name || 'Area',
+      icon:       area.icon || '📌',
+      color:      area.color || '#8b5cf6',
       archived:   area.archived || false,
       sort_order: area.order || 0,
       updated_at: new Date().toISOString(),
@@ -328,21 +367,26 @@ const SDB = {
     if (error) console.error('[SDB] deleteLifeArea error:', error);
   },
 
-  // ── CHALLENGES ────────────────────────────────────────────────
+  // ── CHALLENGES ───────────────────────────────────────────────────
   async saveChallenge(ch) {
     const uid = getCurrentUserId();
     if (!uid) return;
 
+    let milestones = ch.milestones || [];
+    if (typeof milestones === 'string') {
+      try { milestones = JSON.parse(milestones); } catch { milestones = []; }
+    }
+
     const row = {
       id:             toUUID(ch.id),
       user_id:        uid,
-      title:          ch.title,
+      title:          ch.title || 'Untitled',
       icon:           ch.icon || '🏆',
       color:          ch.color || '#8b5cf6',
       total_days:     ch.totalDays || 30,
-      start_date:     ch.startDate,
+      start_date:     ch.startDate || new Date().toISOString().substring(0, 10),
       completed_days: ch.completedDays || [],
-      milestones:     JSON.stringify(ch.milestones || []),
+      milestones:     milestones,  // JSONB — pass as object
       legacy_id:      ch._legacyId || ch.id,
       updated_at:     new Date().toISOString(),
     };
@@ -358,7 +402,7 @@ const SDB = {
     if (error) console.error('[SDB] deleteChallenge error:', error);
   },
 
-  // ── FOCUS SESSIONS ────────────────────────────────────────────
+  // ── FOCUS SESSIONS ───────────────────────────────────────────────
   async saveFocusSession(session) {
     const uid = getCurrentUserId();
     if (!uid) return;
@@ -380,55 +424,73 @@ const SDB = {
     if (error) console.error('[SDB] saveFocusSession error:', error);
   },
 
-  // ── USER SETTINGS ─────────────────────────────────────────────
+  // ── USER SETTINGS ────────────────────────────────────────────────
   async saveSettings() {
     const uid = getCurrentUserId();
     if (!uid) return;
 
-    const ns = S.notificationSettings || {};
-    const fs = S.focusSettings || {};
-    const hs = S.habitStatusSettings || {};
-    const fstreak = S.focusStreak || {};
+    if (typeof S === 'undefined') return;
+
+    const ns      = S.notificationSettings  || {};
+    const fs      = S.focusSettings         || {};
+    const hs      = S.habitStatusSettings   || {};
+    const fstreak = S.focusStreak           || {};
+
+    // productivity_scores must be JSONB object, not string
+    let prodScores = S.productivityScores || {};
+    if (typeof prodScores === 'string') {
+      try { prodScores = JSON.parse(prodScores); } catch { prodScores = {}; }
+    }
+
+    let sentNotif = S.sentNotifications || {};
+    if (typeof sentNotif === 'string') {
+      try { sentNotif = JSON.parse(sentNotif); } catch { sentNotif = {}; }
+    }
+
+    let lastReminder = S.lastReminderSent || {};
+    if (typeof lastReminder === 'string') {
+      try { lastReminder = JSON.parse(lastReminder); } catch { lastReminder = {}; }
+    }
 
     const row = {
-      user_id:                uid,
-      notifications_enabled:  ns.enabled !== false,
-      habits_notifications:   ns.habitsEnabled !== false,
-      tasks_notifications:    ns.tasksEnabled !== false,
-      streaks_notifications:  ns.streaksEnabled !== false,
-      daily_review_enabled:   ns.dailyReviewEnabled !== false,
-      tomorrow_preview_enabled: ns.tomorrowPreviewEnabled !== false,
-      notification_sound:     ns.sound || 'gentle',
-      quiet_hours_enabled:    ns.quietHoursEnabled || false,
-      quiet_hours_start:      ns.quietHoursStart || '22:00',
-      quiet_hours_end:        ns.quietHoursEnd || '07:00',
-      streak_warning_time:    ns.streakWarningTime || '21:00',
-      daily_review_time:      ns.dailyReviewTime || '21:30',
-      tomorrow_preview_time:  ns.tomorrowPreviewTime || '22:00',
-      habit_auto_close_time:  hs.autoCloseTime || '23:59',
-      backfill_window_hours:  hs.backfillWindow || 24,
-      late_streak_rule:       hs.lateStreakRule || 'maintain',
-      habit_notifications:    hs.habitNotifications !== false,
-      focus_goal_hours:       fs.focusGoal || 4,
-      pomodoro_length:        fs.pomodoroLength || 25,
-      break_length:           fs.breakLength || 5,
-      long_break_length:      fs.longBreakLength || 15,
-      deep_work_length:       fs.deepWorkLength || 50,
-      focus_notifications:    fs.focusNotifications !== false,
-      focus_streak_current:   fstreak.currentStreak || 0,
-      focus_streak_longest:   fstreak.longestStreak || 0,
-      focus_streak_last_date: fstreak.lastFocusedDate || null,
-      productivity_scores:    JSON.stringify(S.productivityScores || {}),
-      sent_notifications:     JSON.stringify(S.sentNotifications || {}),
-      last_reminder_sent:     JSON.stringify(S.lastReminderSent || {}),
-      updated_at:             new Date().toISOString(),
+      user_id:                   uid,
+      notifications_enabled:     ns.enabled !== false,
+      habits_notifications:      ns.habitsEnabled !== false,
+      tasks_notifications:       ns.tasksEnabled !== false,
+      streaks_notifications:     ns.streaksEnabled !== false,
+      daily_review_enabled:      ns.dailyReviewEnabled !== false,
+      tomorrow_preview_enabled:  ns.tomorrowPreviewEnabled !== false,
+      notification_sound:        ns.sound || 'gentle',
+      quiet_hours_enabled:       ns.quietHoursEnabled || false,
+      quiet_hours_start:         ns.quietHoursStart || '22:00',
+      quiet_hours_end:           ns.quietHoursEnd || '07:00',
+      streak_warning_time:       ns.streakWarningTime || '21:00',
+      daily_review_time:         ns.dailyReviewTime || '21:30',
+      tomorrow_preview_time:     ns.tomorrowPreviewTime || '22:00',
+      habit_auto_close_time:     hs.autoCloseTime || '23:59',
+      backfill_window_hours:     hs.backfillWindow || 24,
+      late_streak_rule:          hs.lateStreakRule || 'maintain',
+      habit_notifications:       hs.habitNotifications !== false,
+      focus_goal_hours:          fs.focusGoal || 4,
+      pomodoro_length:           fs.pomodoroLength || 25,
+      break_length:              fs.breakLength || 5,
+      long_break_length:         fs.longBreakLength || 15,
+      deep_work_length:          fs.deepWorkLength || 50,
+      focus_notifications:       fs.focusNotifications !== false,
+      focus_streak_current:      fstreak.currentStreak || 0,
+      focus_streak_longest:      fstreak.longestStreak || 0,
+      focus_streak_last_date:    fstreak.lastFocusedDate || null,
+      productivity_scores:       prodScores,
+      sent_notifications:        sentNotif,
+      last_reminder_sent:        lastReminder,
+      updated_at:                new Date().toISOString(),
     };
 
     const { error } = await safeUpsert('user_settings', row, 'user_id');
     if (error) console.error('[SDB] saveSettings error:', error);
   },
 
-  // ── NOTIFICATIONS ─────────────────────────────────────────────
+  // ── NOTIFICATIONS ────────────────────────────────────────────────
   async saveNotification(noti) {
     const uid = getCurrentUserId();
     if (!uid) return;
@@ -448,65 +510,128 @@ const SDB = {
     if (error) console.error('[SDB] saveNotification error:', error);
   },
 
-  // ── FULL SYNC (called by save()) ──────────────────────────────
+  // ── SYNC COMPLETIONS (habit_entries from S.completions) ──────────
+  /**
+   * Pushes all habit entries (completions) from local S.completions to Supabase.
+   * Called during initial sync when local data exists but cloud is empty.
+   */
+  async syncAllCompletions(data) {
+    const uid = getCurrentUserId();
+    if (!uid) return;
+
+    const src = data || (typeof S !== 'undefined' ? S : null);
+    if (!src || !src.completions) return;
+
+    const statusMap = { 'dn': 'completed', 'dn_late': 'completed_late', 'ms': 'missed', 'pt': 'partial', '': 'pending' };
+
+    const rows = [];
+    for (const [key, statusCode] of Object.entries(src.completions)) {
+      // key format: 'habitId_YYYY-MM-DD'
+      const lastUnderscore = key.lastIndexOf('_', key.indexOf('-') - 1);
+      // Find the date part (YYYY-MM-DD = last 10 chars)
+      const dateStr = key.slice(-10);
+      const habitId = key.slice(0, key.length - 11); // remove '_YYYY-MM-DD'
+
+      if (!habitId || !dateStr || !/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) continue;
+
+      const status = statusMap[statusCode] ?? 'pending';
+      const meta = src.completionMeta?.[key];
+
+      rows.push({
+        habit_id:          toUUID(habitId),
+        user_id:           uid,
+        date:              dateStr,
+        status:            status,
+        version_id:        (meta?.vid && meta.vid !== habitId) ? toUUID(meta.vid) : null,
+        snapshot_name:     meta?.snap?.name     || null,
+        snapshot_target:   meta?.snap?.target   || null,
+        snapshot_icon:     meta?.snap?.icon     || null,
+        snapshot_color:    meta?.snap?.color    || null,
+        snapshot_category: meta?.snap?.category || null,
+        miss_reason:       src.missReasons?.[key] || null,
+        late_completion:   status === 'completed_late',
+        completed_at:      (status === 'completed' || status === 'completed_late')
+                             ? new Date().toISOString() : null,
+        logged_at:         new Date().toISOString(),
+        updated_at:        new Date().toISOString(),
+      });
+    }
+
+    if (!rows.length) return;
+
+    // Batch upsert in chunks of 100 to avoid request size limits
+    for (let i = 0; i < rows.length; i += 100) {
+      const chunk = rows.slice(i, i + 100);
+      const { error } = await _supabase
+        .from('habit_entries')
+        .upsert(chunk, { onConflict: 'habit_id,user_id,date', ignoreDuplicates: false });
+      if (error) console.error('[SDB] syncAllCompletions chunk error:', error);
+    }
+  },
+
+  // ── FULL SYNC (called by save() on a debounce) ───────────────────
+  /**
+   * Syncs all data categories to Supabase.
+   * Called debounced from save() — for completions use setHabitEntry() directly.
+   */
   async syncAll(data) {
     const uid = getCurrentUserId();
     if (!uid || !window.MomentumOnline) return;
 
-    if (!data) data = window.S;
-    if (!data) return;
+    const src = data || (typeof S !== 'undefined' ? S : null);
+    if (!src) return;
 
-    // Debounce — sync every 1 second when active
     if (this._syncDebounce) clearTimeout(this._syncDebounce);
     this._syncDebounce = setTimeout(async () => {
       try {
         await this.saveSettings();
 
-        if (data.habits?.length) {
-          for (const h of data.habits) {
+        if (src.habits?.length) {
+          for (const h of src.habits) {
             await this.saveHabit(h);
           }
         }
 
-        if (data.tasks?.length) {
-          for (const t of data.tasks) {
+        if (src.tasks?.length) {
+          for (const t of src.tasks) {
             await this.saveTask(t);
           }
         }
 
-        if (data.goals?.length) {
-          for (const g of data.goals) {
+        if (src.goals?.length) {
+          for (const g of src.goals) {
             await this.saveGoal(g);
           }
         }
 
-        if (data.journal?.length) {
-          for (const j of data.journal) {
+        if (src.journal?.length) {
+          for (const j of src.journal) {
             await this.saveJournalEntry(j);
           }
         }
 
-        if (data.reflections) {
-          for (const [dateStr, ref] of Object.entries(data.reflections)) {
+        if (src.reflections && Object.keys(src.reflections).length) {
+          for (const [dateStr, ref] of Object.entries(src.reflections)) {
             await this.saveReflection(dateStr, ref);
           }
         }
 
-        if (data.challenges?.length) {
-          for (const ch of data.challenges) {
+        if (src.challenges?.length) {
+          for (const ch of src.challenges) {
             await this.saveChallenge(ch);
           }
         }
 
-        if (data.lifeAreas?.length) {
-          for (const la of data.lifeAreas) {
+        if (src.lifeAreas?.length) {
+          for (const la of src.lifeAreas) {
             await this.saveLifeArea(la);
           }
         }
+
       } catch (e) {
         console.warn('[SDB] syncAll error:', e);
       }
-    }, 1000);
+    }, 1500);
   },
 
   _syncDebounce: null,

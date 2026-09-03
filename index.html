@@ -3158,16 +3158,32 @@
     function getDayName(ds) { return new Date(ds + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'long' }); }
     function selectColorSwatch(el, selClass) { document.querySelectorAll('.' + selClass).forEach(s => s.classList.remove('sel')); el.classList.add('sel'); }
     window.today = today; window.formatDate = formatDate; window.getDayName = getDayName; window.selectColorSwatch = selectColorSwatch;
-    function sc(hid, ds, v) {
+    function sc(hid, ds, v, _skipSupabase) {
       S.completions[hid + '_' + ds] = v;
       save();
-      // Sync to Supabase
-      if (window.momentumUser && typeof SDB !== 'undefined') {
+      // Sync to Supabase (skipped if caller will call after snapshot update)
+      if (!_skipSupabase && window.momentumUser && typeof SDB !== 'undefined') {
         SDB.setHabitEntry(hid, ds, v).catch(e => console.warn('[sc] Supabase sync error:', e));
       }
     }
     // Five-status cycle: Pending(empty) → Completed(dn) → Partial(pt) → Missed(ms) → Pending
-    function cycleC(hid, ds) { const c = gc(hid, ds); const n = c === '' ? 'dn' : c === 'dn' ? 'pt' : c === 'pt' ? 'ms' : ''; sc(hid, ds, n); return n; }
+    function cycleC(hid, ds) {
+      const c = gc(hid, ds);
+      const n = c === '' ? 'dn' : c === 'dn' ? 'pt' : c === 'pt' ? 'ms' : '';
+      // Update local state only (skip Supabase until after snapshot)
+      sc(hid, ds, n, true);
+      // Record/remove snapshot
+      if (n === 'dn') {
+        if (typeof recordCompletionSnapshot === 'function') recordCompletionSnapshot(hid, ds);
+      } else {
+        if (typeof removeCompletionSnapshot === 'function') removeCompletionSnapshot(hid, ds);
+      }
+      // Now sync to Supabase with snapshot ready
+      if (window.momentumUser && typeof SDB !== 'undefined') {
+        SDB.setHabitEntry(hid, ds, n).catch(e => console.warn('[cycleC] Supabase error:', e));
+      }
+      return n;
+    }
 
     function hStats(hid) {
       const now = new Date(); now.setHours(0, 0, 0, 0);
@@ -3385,17 +3401,20 @@
       const yesterday = new Date();
       yesterday.setDate(yesterday.getDate() - 1);
       const ds = fd(yesterday);
-      sc(hid, ds, 'dn_late');
-      // Record snapshot details
-      if (typeof recordCompletionSnapshot === 'function') {
-        recordCompletionSnapshot(hid, ds);
-      }
-      // Record audit meta in completionMeta
+      // 1. Update local state
+      sc(hid, ds, 'dn_late', true);
+      // 2. Record snapshot before Supabase sync
+      if (typeof recordCompletionSnapshot === 'function') recordCompletionSnapshot(hid, ds);
+      // 3. Extra audit meta
       if (S.completionMeta) {
         S.completionMeta[hid + '_' + ds] = S.completionMeta[hid + '_' + ds] || {};
         S.completionMeta[hid + '_' + ds].status = 'completed_late';
         S.completionMeta[hid + '_' + ds].actualDate = ds;
         S.completionMeta[hid + '_' + ds].loggedDate = fd(new Date());
+      }
+      // 4. Sync to Supabase with snapshot ready
+      if (window.momentumUser && typeof SDB !== 'undefined') {
+        SDB.setHabitEntry(hid, ds, 'dn_late').catch(e => console.warn('[late] Supabase error:', e));
       }
       save();
       rDash();
@@ -3406,13 +3425,22 @@
       const t = ts(), cur = gc(hid, t);
       // Cycle: Pending→Done→Pending (allow clearing a done)
       const next = cur === 'dn' ? '' : 'dn';
-      sc(hid, t, next);
-      // Record or remove completion snapshot in versioning system
+
+      // 1. Update local state (skip Supabase — we sync after snapshot)
+      sc(hid, t, next, true);
+
+      // 2. Record/remove completion snapshot BEFORE syncing to Supabase
       if (next === 'dn') {
         if (typeof recordCompletionSnapshot === 'function') recordCompletionSnapshot(hid, t);
       } else {
         if (typeof removeCompletionSnapshot === 'function') removeCompletionSnapshot(hid, t);
       }
+
+      // 3. Now sync to Supabase (snapshot is ready in S.completionMeta)
+      if (window.momentumUser && typeof SDB !== 'undefined') {
+        SDB.setHabitEntry(hid, t, next).catch(e => console.warn('[togToday] Supabase sync error:', e));
+      }
+
       const row = document.getElementById('tcr-' + hid), box = document.getElementById('tcb-' + hid), badge = document.getElementById('tbadge-' + hid);
       if (next === 'dn') { row.classList.add('done'); box.classList.add('done'); box.textContent = '✓'; box.classList.add('bounce'); badge.className = 'badge bg2'; badge.textContent = 'Done'; const h = S.habits.find(x => x.id === hid); toast(`✅ ${h?.name} done!`, 'success'); }
       else { row.classList.remove('done'); box.classList.remove('done'); box.textContent = ''; badge.className = 'badge bp2'; badge.textContent = 'Pending'; }
