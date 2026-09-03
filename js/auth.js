@@ -93,12 +93,11 @@ async function _loadUserData(user) {
       });
     } else {
       // Cloud database is empty for this user.
-      // Push local localStorage data to cloud.
-      console.log('[Auth] Supabase empty — pushing local data to cloud...');
+      // Push local localStorage data to cloud immediately (not debounced).
+      // IMPORTANT: habits must be in DB before habit_entries (FK constraint).
+      console.log('[Auth] Supabase empty — pushing local data to cloud (immediate sync)...');
       if (typeof SDB !== 'undefined') {
-        await SDB.syncAll(S);
-        // Also sync habit completions (S.completions)
-        await SDB.syncAllCompletions(S);
+        await SDB.syncAllImmediate(S);
       }
     }
 

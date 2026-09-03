@@ -145,6 +145,30 @@ const SDB = {
     // Map local habit ID → UUID (same algorithm used when saving habits)
     const habitUuid = toUUID(habitId);
 
+    // Ensure the parent habit exists in Supabase first (prevents FK violation).
+    // This is cheap — it's just a check, and upsert is idempotent.
+    const habit = typeof S !== 'undefined' ? S.habits.find(h => h.id === habitId) : null;
+    if (habit) {
+      const { error: hErr } = await safeUpsert('habits', {
+        id:            habitUuid,
+        user_id:       uid,
+        name:          habit.name || 'Untitled',
+        category:      habit.category || 'General',
+        frequency:     habit.freq || habit.frequency || 'daily',
+        icon:          habit.icon || '💪',
+        color:         habit.color || '#8b5cf6',
+        reminder_time: habit.reminder || null,
+        note:          habit.note || null,
+        is_active:     habit.active !== false,
+        legacy_id:     habit._legacyId || habit.id,
+        updated_at:    new Date().toISOString(),
+      }, 'id');
+      if (hErr) {
+        console.error('[SDB] setHabitEntry: failed to upsert parent habit:', hErr.message);
+        return; // cannot proceed without habit in DB
+      }
+    }
+
     // Status code → Supabase enum value
     const statusMap = {
       'dn':      'completed',
@@ -159,13 +183,15 @@ const SDB = {
     const metaKey = `${habitId}_${dateStr}`;
     const meta = (typeof S !== 'undefined' && S.completionMeta)?.[metaKey];
 
-    // Build the row — use upsert on (habit_id, user_id, date) unique constraint
+    // Build the row — upsert on (habit_id, user_id, date) unique constraint
+    // NOTE: version_id is intentionally null to avoid FK violations if version
+    //       hasn't been synced to Supabase yet. Snapshot data is stored inline.
     const row = {
       habit_id:          habitUuid,
       user_id:           uid,
       date:              dateStr,
       status:            status,
-      version_id:        (meta?.vid && meta.vid !== habitId) ? toUUID(meta.vid) : null,
+      version_id:        null,   // avoid FK violation — snapshot stored inline below
       snapshot_name:     meta?.snap?.name     || extra.name     || null,
       snapshot_target:   meta?.snap?.target   || extra.target   || null,
       snapshot_icon:     meta?.snap?.icon     || extra.icon     || null,
@@ -179,19 +205,20 @@ const SDB = {
       updated_at:        new Date().toISOString(),
     };
 
-    // Supabase upsert with composite unique key constraint
+    // Supabase upsert with composite unique key (habit_id, user_id, date)
     try {
       const result = await _supabase
         .from('habit_entries')
         .upsert(row, { onConflict: 'habit_id,user_id,date', ignoreDuplicates: false });
 
       if (result.error) {
-        console.error('[SDB] setHabitEntry error:', result.error);
-        // Fall back to offline queue
+        console.error('[SDB] setHabitEntry FAILED:', result.error.message, result.error.code, '| row:', JSON.stringify({ habitId, dateStr, status, habitUuid }));
         enqueueOfflineChange({ type: 'upsert', table: 'habit_entries', data: row, conflict: 'habit_id,user_id,date' });
+      } else {
+        console.log('[SDB] setHabitEntry OK:', habitId, dateStr, status);
       }
     } catch (err) {
-      console.error('[SDB] setHabitEntry exception:', err);
+      console.error('[SDB] setHabitEntry exception:', err.message, '| row:', JSON.stringify({ habitId, dateStr, status }));
       enqueueOfflineChange({ type: 'upsert', table: 'habit_entries', data: row, conflict: 'habit_id,user_id,date' });
     }
   },
@@ -205,6 +232,7 @@ const SDB = {
       user_id:           uid,
       date:              e.date,
       status:            statusMap[e.status] || 'pending',
+      version_id:        null,   // avoid FK violation
       snapshot_name:     e.snap?.name     || null,
       snapshot_target:   e.snap?.target   || null,
       snapshot_icon:     e.snap?.icon     || null,
@@ -526,9 +554,7 @@ const SDB = {
 
     const rows = [];
     for (const [key, statusCode] of Object.entries(src.completions)) {
-      // key format: 'habitId_YYYY-MM-DD'
-      const lastUnderscore = key.lastIndexOf('_', key.indexOf('-') - 1);
-      // Find the date part (YYYY-MM-DD = last 10 chars)
+      // key format: 'habitId_YYYY-MM-DD'  (date is always last 10 chars)
       const dateStr = key.slice(-10);
       const habitId = key.slice(0, key.length - 11); // remove '_YYYY-MM-DD'
 
@@ -542,7 +568,7 @@ const SDB = {
         user_id:           uid,
         date:              dateStr,
         status:            status,
-        version_id:        (meta?.vid && meta.vid !== habitId) ? toUUID(meta.vid) : null,
+        version_id:        null,   // avoid FK violation
         snapshot_name:     meta?.snap?.name     || null,
         snapshot_target:   meta?.snap?.target   || null,
         snapshot_icon:     meta?.snap?.icon     || null,
@@ -559,13 +585,80 @@ const SDB = {
 
     if (!rows.length) return;
 
-    // Batch upsert in chunks of 100 to avoid request size limits
+    // Batch upsert in chunks of 100
     for (let i = 0; i < rows.length; i += 100) {
       const chunk = rows.slice(i, i + 100);
       const { error } = await _supabase
         .from('habit_entries')
         .upsert(chunk, { onConflict: 'habit_id,user_id,date', ignoreDuplicates: false });
       if (error) console.error('[SDB] syncAllCompletions chunk error:', error);
+    }
+  },
+
+  // ── IMMEDIATE SYNC (no debounce — used on first login) ───────────
+  /**
+   * Like syncAll but runs immediately without the debounce timer.
+   * Use this when you MUST ensure data is in Supabase before the user interacts.
+   */
+  async syncAllImmediate(data) {
+    const uid = getCurrentUserId();
+    if (!uid || !window.MomentumOnline) return;
+
+    const src = data || (typeof S !== 'undefined' ? S : null);
+    if (!src) return;
+
+    try {
+      await this.saveSettings();
+
+      // Save habits first (habit_entries FK depends on habits existing)
+      if (src.habits?.length) {
+        for (const h of src.habits) {
+          await this.saveHabit(h);
+        }
+      }
+
+      if (src.tasks?.length) {
+        for (const t of src.tasks) {
+          await this.saveTask(t);
+        }
+      }
+
+      if (src.goals?.length) {
+        for (const g of src.goals) {
+          await this.saveGoal(g);
+        }
+      }
+
+      if (src.journal?.length) {
+        for (const j of src.journal) {
+          await this.saveJournalEntry(j);
+        }
+      }
+
+      if (src.reflections && Object.keys(src.reflections).length) {
+        for (const [dateStr, ref] of Object.entries(src.reflections)) {
+          await this.saveReflection(dateStr, ref);
+        }
+      }
+
+      if (src.challenges?.length) {
+        for (const ch of src.challenges) {
+          await this.saveChallenge(ch);
+        }
+      }
+
+      if (src.lifeAreas?.length) {
+        for (const la of src.lifeAreas) {
+          await this.saveLifeArea(la);
+        }
+      }
+
+      // After habits are saved, sync entries (needs habits in DB first)
+      await this.syncAllCompletions(src);
+
+      console.log('[SDB] syncAllImmediate complete');
+    } catch (e) {
+      console.warn('[SDB] syncAllImmediate error:', e);
     }
   },
 
