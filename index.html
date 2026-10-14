@@ -59,6 +59,7 @@
   <link rel="stylesheet" href="/css/realtime.css">
   <link rel="stylesheet" href="/css/focus.css">
   <link rel="stylesheet" href="/css/evolution.css">
+  <link rel="stylesheet" href="/css/collections.css">
   <style>
     :root {
       --bg: #050912;
@@ -1921,6 +1922,7 @@
         <div class="ni" data-p="focus" onclick="go('focus')"><span class="ico">🎯</span>Focus Hub</div>
         <div class="ni" data-p="knowledge" onclick="go('knowledge')"><span class="ico">💡</span>Knowledge</div>
         <div class="ni" data-p="challenges" onclick="go('challenges')"><span class="ico">🏆</span>Challenges</div>
+        <div class="ni" data-p="collections" onclick="go('collections')"><span class="ico">📁</span>Collections</div>
         <div class="nav-sec">Insights</div>
         <div class="ni" data-p="matrix" onclick="go('matrix')"><span class="ico">📋</span>Calendar</div>
         <div class="ni" data-p="analytics" onclick="go('analytics')"><span class="ico">📊</span>Analytics</div>
@@ -2020,6 +2022,9 @@
             </div>
           </div>
         </div>
+
+        <!-- COLLECTIONS -->
+        <div id="page-collections" class="page"></div>
 
         <!-- MATRIX -->
         <div id="page-matrix" class="page">
@@ -2649,7 +2654,56 @@
     </div>
   </div>
 
+  <!-- COLLECTION MODAL -->
+  <div id="m-collection" class="mo hid">
+    <div class="mb" style="max-width:560px">
+      <div class="mh">
+        <h3 id="col-m-title">📁 Create Collection</h3>
+        <button class="btn bg btn-ico" onclick="closeCollectionModal()">✕</button>
+      </div>
+      <div class="mbd" style="max-height:75vh;overflow-y:auto">
+        <input type="hidden" id="col-eid">
+        <!-- Name & Desc -->
+        <div class="fg"><label class="fl">Collection Name *</label><input class="fi" id="col-name" placeholder="e.g. 30-Day Fitness Sprint, 7-Day Discipline Challenge..."></div>
+        <div class="fg"><label class="fl">Description (optional)</label><input class="fi" id="col-desc" placeholder="What is this collection about?"></div>
+
+        <!-- Icon & Color -->
+        <div class="fr">
+          <div class="fg"><label class="fl">Icon</label><div class="ig" id="col-icons"></div></div>
+          <div class="fg"><label class="fl">Color</label><div class="csw" id="col-colors"></div></div>
+        </div>
+
+        <!-- Dates -->
+        <div class="fr">
+          <div class="fg"><label class="fl">Start Date *</label><input class="fi" id="col-start" type="date" onchange="colSyncEnd()"></div>
+          <div class="fg"><label class="fl">End Date *</label><input class="fi" id="col-end" type="date"></div>
+        </div>
+
+        <!-- Duration presets -->
+        <div class="fg">
+          <label class="fl">Duration Presets</label>
+          <div style="display:flex;flex-wrap:wrap;gap:6px" id="col-duration-presets"></div>
+        </div>
+
+        <!-- Habits -->
+        <div class="fg">
+          <label class="fl" style="margin-bottom:8px">Habits in this Collection</label>
+          <div id="col-habits-list"></div>
+          <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap">
+            <button type="button" class="btn bs btn-sm" onclick="colAddExisting()">➕ Add Existing Habit</button>
+            <button type="button" class="btn bg btn-sm" onclick="colAddNew()">✨ Create New Habit</button>
+          </div>
+        </div>
+      </div>
+      <div class="mf">
+        <button class="btn bg" onclick="closeCollectionModal()">Cancel</button>
+        <button class="btn bp" onclick="saveCollectionModal()">Save Collection</button>
+      </div>
+    </div>
+  </div>
+
   <!-- LIFE AREA MODAL -->
+
   <div id="m-lifearea" class="mo hid">
     <div class="mb" style="max-width:400px">
       <div class="mh">
@@ -3094,6 +3148,7 @@
           if (!S.challenges) S.challenges = [];
           if (!S.timeline) S.timeline = [];
           if (!S.productivityScores) S.productivityScores = {};
+          if (!S.collections) S.collections = [];
 
           // Clear demo data on first load after this change
           if (!S.demoPurged) {
@@ -3138,6 +3193,7 @@
       S.challenges = [];
       S.timeline = [];
       S.productivityScores = {};
+      S.collections = [];
       S.demoPurged = true;
       save();
     }
@@ -3244,7 +3300,8 @@
         knowledge: 'Knowledge Vault',
         challenges: 'Challenges',
         timeline: 'Life Timeline',
-        reviews: 'Performance Reviews'
+        reviews: 'Performance Reviews',
+        collections: 'Habit Collections'
       };
       const subs = {
         dashboard: 'Your personal growth command center',
@@ -3260,7 +3317,8 @@
         knowledge: '💡 Your personal growth wiki, notes, and references',
         challenges: '🏆 Take on goal-driven streaks and habits',
         timeline: '🌍 Your personal history and key milestones',
-        reviews: '📊 Weekly, Monthly, and Yearly auto-generated growth reports'
+        reviews: '📊 Weekly, Monthly, and Yearly auto-generated growth reports',
+        collections: '📁 Temporary habit challenges with custom tracking periods'
       };
       document.getElementById('tb-title').textContent = titles[page] || page;
       document.getElementById('tb-sub').textContent = subs[page] || '';
@@ -3281,7 +3339,8 @@
         knowledge: () => typeof renderKnowledge === 'function' && renderKnowledge(),
         challenges: () => typeof renderChallenges === 'function' && renderChallenges(),
         timeline: () => typeof renderTimeline === 'function' && renderTimeline(),
-        reviews: () => typeof renderReviews === 'function' && renderReviews()
+        reviews: () => typeof renderReviews === 'function' && renderReviews(),
+        collections: () => typeof renderCollections === 'function' && renderCollections()
       };
       if (fns[page]) fns[page]();
       document.querySelector('.content').scrollTo(0, 0);
@@ -3920,8 +3979,8 @@
     function toast(msg, type = 'info') { const ico = { success: '✅', error: '❌', info: 'ℹ️' }; const el = document.createElement('div'); el.className = `toast ${type}`; el.innerHTML = `<span>${ico[type]}</span><span>${msg}</span>`; document.getElementById('toasts').appendChild(el); setTimeout(() => el.remove(), 3200); }
 
     // ── MODAL CLOSE ON BACKDROP ──
-    document.querySelectorAll('.mo').forEach(mo => { mo.addEventListener('click', function (e) { if (e.target === this) { if (this.id === 'm-habit') closeHM(); else if (this.id === 'm-goal') closeGM(); else if (this.id === 'm-miss') closeMM(); else if (this.id === 'm-confirm') closeConf(); else if (this.id === 'm-task') closeTaskModal(); else if (this.id === 'm-lifearea') closeLifeAreaModal(); else if (this.id === 'm-knowledge') closeKnowledgeModal(); else if (this.id === 'm-challenge') closeChallengeModal(); else if (this.id === 'm-timeline-event') closeTimelineEventModal(); } }); });
-    document.addEventListener('keydown', e => { if (e.key === 'Escape') { closeHM(); closeGM(); closeMM(); closeConf(); if (typeof closeTaskModal !== 'undefined') closeTaskModal(); if (typeof closeHabitDetail !== 'undefined') closeHabitDetail(); if (typeof closeLifeAreaModal !== 'undefined') closeLifeAreaModal(); if (typeof closeKnowledgeModal !== 'undefined') closeKnowledgeModal(); if (typeof closeChallengeModal !== 'undefined') closeChallengeModal(); if (typeof closeTimelineEventModal !== 'undefined') closeTimelineEventModal(); } });
+    document.querySelectorAll('.mo').forEach(mo => { mo.addEventListener('click', function (e) { if (e.target === this) { if (this.id === 'm-habit') closeHM(); else if (this.id === 'm-goal') closeGM(); else if (this.id === 'm-miss') closeMM(); else if (this.id === 'm-confirm') closeConf(); else if (this.id === 'm-task') closeTaskModal(); else if (this.id === 'm-lifearea') closeLifeAreaModal(); else if (this.id === 'm-knowledge') closeKnowledgeModal(); else if (this.id === 'm-challenge') closeChallengeModal(); else if (this.id === 'm-timeline-event') closeTimelineEventModal(); else if (this.id === 'm-collection') closeCollectionModal(); } }); });
+    document.addEventListener('keydown', e => { if (e.key === 'Escape') { closeHM(); closeGM(); closeMM(); closeConf(); if (typeof closeTaskModal !== 'undefined') closeTaskModal(); if (typeof closeHabitDetail !== 'undefined') closeHabitDetail(); if (typeof closeLifeAreaModal !== 'undefined') closeLifeAreaModal(); if (typeof closeKnowledgeModal !== 'undefined') closeKnowledgeModal(); if (typeof closeChallengeModal !== 'undefined') closeChallengeModal(); if (typeof closeTimelineEventModal !== 'undefined') closeTimelineEventModal(); if (typeof closeCollectionModal !== 'undefined') closeCollectionModal(); } });
   </script>
 
   <!-- ── Planner Module ──────────────────────────────────────────────────── -->
@@ -3950,6 +4009,9 @@
 
   <!-- ── Productivity Score & Reviews Module ────────────────────────────── -->
   <script src="/js/productivity.js"></script>
+
+  <!-- ── Habit Collections Module ────────────────────────────────────────── -->
+  <script src="/js/collections.js"></script>
 
   <!-- ── Supabase Integration Modules ─────────────────────────────────── -->
   <!-- Load order matters: supabase-client → auth → db-supabase → migration → realtime-supabase -->
